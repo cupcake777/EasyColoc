@@ -1,0 +1,41 @@
+# ========
+# qtl.yaml
+# ========
+qtl_info:
+  file: "/home/ycl/work/coloc/test/QTL_summary.csv"
+  base_dir: "/home/ycl/work/coloc/qtl"
+  columns:
+    id: "Type" #发现type其实也可以 因为我每种类型的QTL只会有一套数据
+    sample_size: "NumberRNASeqandGTSamples" 
+    all_filename: "allPairsTabixFilename"
+    sig_filename: "sigPairsTabixFilename"
+data_dir: "/home/ycl/work/coloc/qtl"
+QTL_sig_pheno_col: 6
+build: "hg38"
+QTL_all_header:
+  - "chr"
+  - "start"
+  - "end"
+  - "ref"
+  - "alt"
+  - "variant_id"
+  - "snp"
+  - "phenotype_id"
+  - "start_distance"
+  - "af"
+  - "ma_samples"
+  - "ma_count"
+  - "pval_nominal"
+  - "slope"
+  - "slope_se"
+
+QTL_cols:
+  phenotype: "phenotype_id"
+  chrom: "chr"
+  pos: "end"
+  chromEnd: "end"
+  pval: "pval_nominal"
+  beta: "slope"
+  se: "slope_se"
+  ref: "ref"
+  alt: "alt"

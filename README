@@ -1,0 +1,37 @@
+# coloc_pipeline
+---
+This pipeline will made by myself, with 'ColocQuiaL' as a reference. We hope to make a highly efficiency and easy to implied pipeline.
+Top of all, our pipeline will contain the function below:
+- auto liftover
+- coloc susie
+- harmonize data
+- auto visualize plot
+- fast and easy to handle lots of GWAS datasets with QTL datasets
+
+---
+## Quick to start
+okay, this will be the final parts to write.
+I will keep it blank here first.
+
+---
+## Reference data
+To fast liftover between hg19 and hg38 coordinate version, we collect the public data from plink to use as reference:
+1KG 2508 hg19 plink format (rsid)
+1KG 3202 hg38 plink format (rsid)
+When download first in plink2 format, we need to simply process data first:
+```bash
+# unzip
+# remove related samples
+# remove rare variants and check Hardy-Winberg Rule
+# remove duplicated variants
+```
+To achieve fast liftover, we use snp151 hash table here (same with ColocQuiaL):
+link_here
+
+---
+## Configure your data
+Before all we satrt, we need to make at least 3 configure file here, to offer the fundation info of the pipeline:
+
+---
+## Running
+our main function

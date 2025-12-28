@@ -1,0 +1,32 @@
+# =========
+# gwas.yaml
+# =========
+
+# Datasets List
+datasets:
+  - id: "Asian_SCZ"
+    name: "Asian SCZ"
+    file: "/home/ycl/share_group_folder/ref/PGC3_SCZ_wave3.asian.autosome.public.v3.txt"
+    build: "hg19"
+    type: "cc" # "cc" (Case-Control) or "quant" (Quantitative)
+    sample_size_n: null
+    prop: 0.455 # Case proportion (Type="cc" required)
+    
+    # columns mapping
+    columns:
+      snp: "ID"
+      chrom: "CHROM"
+      pos: "POS"
+      a1: "A1"
+      a2: "A2"
+      pval: "PVAL"
+      n: "N"
+      maf: "MAF"
+      beta: "BETA"
+      se: "SE"
+
+  # example to add more data
+  # - id: "dataset02"
+  #   name: "Another Trait"
+  #   file: "/path/to/summary_stats.txt"
+  #   ...

@@ -1,0 +1,2 @@
+Type,NumberRNASeqandGTSamples,NumberRNASeqSamples,Number_of_sigpheno,allPairsTabixFilename,sigPairsTabixFilename
+eQTL,677,740,13745,chb.allpairs.tab.gz,chb.sigpairs.tab.gz
