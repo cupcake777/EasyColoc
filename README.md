@@ -94,18 +94,11 @@ If your GWAS data is in hg19, you'll need liftOver chain files:
 
 EasyColoc uses pre-computed hash tables for fast rsID ↔ position conversion.
 
+1. **Download dbSNP BED files**: Visit [NCBI dbSNP FTP](https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/BED/) and download all `bed_chr_*.bed.gz` files to a local directory.
+
+2. **Convert BED directly to RDS**:
 ```bash
-# Download dbSNP BED files (choose one build)
-# hg38:
-wget https://ftp.ncbi.nih.gov/snp/organisms/human_9606_b151_GRCh38p7/BED/bed_chr_*.bed.gz
-
-# Convert BED directly to RDS (single step)
 Rscript tools/bed2rds.r -i /path/to/bed_files -o /path/to/hash_tables
-
-# Or with options
-Rscript tools/bed2rds.r --input /path/to/bed_files \
-                        --output /path/to/hash_tables \
-                        --build hg38
 ```
 
 **Legacy method** (BED → JSON → RDS):
@@ -124,10 +117,10 @@ use_parallel: true
 n_cores: 8
 
 # Reference data paths
-plink_hg38: "/path/to/1kg_hg38/1000g.pgen"
-plink_hg19: "/path/to/1kg_hg19/1000g.pgen"
+plink_hg38: "/path/to/1kg_hg38/1000g"
+plink_hg19: "/path/to/1kg_hg19/1000g"
 gene_anno: "/path/to/gencode.v43.gtf"
-recomb_map: "/path/to/recomb_rate/"
+recomb_map: "/path/to/recomb_rate/CHB/CHB"
 
 # Hash table for rsID conversion
 hash_table_dir: "/path/to/snp_hash_tables/"
@@ -137,13 +130,13 @@ hash_table_dir: "/path/to/snp_hash_tables/"
 
 Sample test data is available for download to help you get started:
 
-- **Dropbox**: [EasyColoc Test Data](https://www.dropbox.com/sh/xxxxx)
-- Contains: Sample GWAS summary stats, QTL data, and configuration files
+- **Dropbox**: [EasyColoc Test Data](https://www.dropbox.com/sh/example)
+- Contains: Sample GWAS summary stats, QTL data.
 
 ```bash
 # Download and extract test data
-wget https://www.dropbox.com/sh/xxxxx/test_data.tar.gz
-tar -xzf test_data.tar.gz -C /path/to/easycoloc/
+wget https://www.dropbox.com/sh/example/test_data.tar.xz
+tar -xf test_data.tar.xz -C /path/to/EasyColoc/data/
 ```
 
 ## Quick Start
@@ -268,13 +261,13 @@ EasyColoc/
 │   ├── utils_helpers.R  # Helper functions
 │   └── utils_plot.R     # Visualization
 └── tools/               # Utility scripts
-    ├── bed2rds.r             # Convert BED directly to RDS (recommended)
-    ├── hash2rds.r           # Convert JSON to RDS (legacy)
-    ├── dbsnp_hash_table_maker.py  # Create hash tables from BED files (legacy)
+    ├── bed2rds.r             # Convert BED directly to RDS
     └── easycoloc.yml        # Conda environment configuration
 ```
 
 ## Citation
+
+EasyColoc is inspired by [ColocQuiaL](https://github.com/bvoightlab/ColocQuiaL) and utilizes [gwaslab](https://github.com/Jia-Xuan-Low/gwaslab) for data harmonization.
 
 If you use EasyColoc in your research, please cite:
 
