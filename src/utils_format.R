@@ -1,7 +1,6 @@
 # ------------------------------------------------------------------------------
 # src/utils_format.R
 # ------------------------------------------------------------------------------
-
 suppressPackageStartupMessages({
   library(data.table)
   library(dplyr)
@@ -60,8 +59,6 @@ format_sumstats <- function(df, type, col_map, case_control = FALSE) {
   for (col in numeric_cols) {
     if (col %in% names(df_std)) df_std[[col]] <- as.numeric(df_std[[col]])
   }
-
-  # Now safe to use := because df_std is guaranteed to be a data.table
   if (case_control && "BETA" %notin% names(df_std) && "OR" %in% names(df_std)) {
     df_std[, BETA := log(OR)]
   }
@@ -77,7 +74,7 @@ run_gwaslab_harmonization <- function(sumstats_dt,
                                       save_dir = NULL,
                                       dataset_id = NULL) {
 
-  message("--- Starting GWASLab Harmonization & LiftOver ---")
+  message("--- Starting Harmonization & LiftOver ---")
 
   if (!file.exists(ref_fasta)) {
     warning(glue("Reference FASTA not found: {ref_fasta}. Skipping harmonization."))
@@ -120,15 +117,11 @@ import pandas as pd
 import sys
 try:
     print('Loading sumstats with GWASLab...')
-    # Load assuming gwaslab format since we formatted it previously
-    # Explicitly set the source build
     mysumstats = gl.Sumstats('{input_file}', fmt='gwaslab', build='{source_build}')
     mysumstats.basic_check()
     
     print(f'Harmonizing against: {ref_fasta}')
     mysumstats.harmonize(ref_seq='{ref_fasta}', ref_infer=True, remove=True)
-    
-    # Conditional LiftOver
     src_b = '{source_build}'
     tgt_b = '{target_build}'
     
@@ -149,18 +142,19 @@ except Exception as e:
   message("Running Python script...")
   exit_code <- system(cmd)
 
-  if (exit_code == 0) {
-      if (file.exists(output_file)) {
-        res_dt <- fread(output_file)
-        message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(res_dt)}"))
-        if(use_cache) message(glue("Saved result to: {output_file}"))
-        return(res_dt)
-      } else {
-        stop("GWASLab output file missing.")
-      }
-  } else {
-    stop("GWASLab processing failed! Check logs above.")
-  }
+   if (exit_code == 0) {
+       if (file.exists(output_file)) {
+         res_dt <- fread(output_file)
+         message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(res_dt)}"))
+         message(glue("  Output columns: {paste(names(res_dt), collapse=', ')}"))
+         if(use_cache) message(glue("Saved result to: {output_file}"))
+         return(res_dt)
+       } else {
+         stop("GWASLab output file missing.")
+       }
+   } else {
+     stop("GWASLab processing failed! Check logs above.")
+   }
 }
 
 # format input
@@ -169,7 +163,7 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
                                   qtl_cols = list(pval="pval_nominal", beta="slope", se="slope_se"),
                                   use_hash_table = TRUE) {
 
-    message("\n=== MERGING GWAS AND QTL DATA ===")
+    message("\n--- MERGING DATA ---")
     gwas_df <- as.data.table(gwas_df)
     qtl_df <- as.data.table(qtl_df)
     message(glue("Input: GWAS={nrow(gwas_df)} SNPs, QTL={nrow(qtl_df)} SNPs"))
@@ -193,7 +187,7 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         } 
     }
     if ("REF" %in% names(qtl_df) && "EA" %notin% names(qtl_df)) {
-         qtl_df[, `:=`(EA = ALT, NEA = REF)] # Assuming ALT is Effect Allele for QTL usually
+         qtl_df[, `:=`(EA = ALT, NEA = REF)]
     }
     merged_dt <- NULL
     merge_strategy <- "none"
@@ -217,11 +211,20 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         )
 
         if (nrow(merged_dt) > 0) {
-            message(glue("Direct rsID match: {nrow(merged_dt)} SNPs"))
+            message(glue("rsID match: {nrow(merged_dt)} SNPs"))
             merge_strategy <- "rsid_direct"
-            if (gwas_id_col %in% names(merged_dt)) setnames(merged_dt, gwas_id_col, "snp")
+            if ("SNPID.gwas" %in% names(merged_dt)) {
+                merged_dt$snp <- merged_dt$SNPID.gwas
+            } else if ("SNP.gwas" %in% names(merged_dt)) {
+                merged_dt$snp <- merged_dt$SNP.gwas
+            } else if ("SNPID" %in% names(merged_dt)) {
+                merged_dt$snp <- merged_dt$SNPID
+            } else if ("SNP" %in% names(merged_dt)) {
+                merged_dt$snp <- merged_dt$SNP
+            }
+            message(glue("  SNP sample: {paste(head(merged_dt$snp, 3), collapse=', ')}"))
         } else {
-            message("No direct rsID overlap detected")
+            message("No rsID overlap detected")
             merged_dt <- NULL 
         }
     }
@@ -231,13 +234,13 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         gwas_id_col <- if ("SNPID" %in% names(gwas_df)) "SNPID" else if ("SNP" %in% names(gwas_df)) "SNP" else if ("rsid" %in% names(gwas_df)) "rsid" else NULL
 
         if (!is.null(gwas_id_col) && gwas_has_pos) {
-            message("  Converting GWAS rsIDs to chr_pos format (chromosome-aware)...")
+            message("  Converting GWAS rsIDs to chr_pos format...")
             
             gwas_chrpos <- convert_rsid_to_chrpos_optimized(
                 gwas_df[[gwas_id_col]],
                 gwas_df$CHR
             )
-            gwas_df$gwas_chrpos_id <- gwas_chrpos # Works on DT and DF
+            gwas_df$gwas_chrpos_id <- gwas_chrpos
 
             n_converted <- sum(!is.na(gwas_chrpos))
             message(glue("  Converted {n_converted}/{nrow(gwas_df)} GWAS SNPs ({round(n_converted/nrow(gwas_df)*100, 1)}%)"))
@@ -252,17 +255,27 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
                     suffixes = c(".gwas", ".qtl")
                 )
                 
-                if (nrow(merged_dt) > 0) {
-                    message(glue("  ✓ Hash table conversion match: {nrow(merged_dt)} SNPs"))
-                    merge_strategy <- "hash_conversion"
-                    
-                    if (gwas_id_col %in% names(gwas_df)) {
-                         idx <- match(merged_dt$gwas_chrpos_id, gwas_df$gwas_chrpos_id)
-                         merged_dt$snp <- gwas_df[[gwas_id_col]][idx]
-                    } else {
+                 if (nrow(merged_dt) > 0) {
+                     message(glue("  ✓ Hash table conversion match: {nrow(merged_dt)} SNPs"))
+                     merge_strategy <- "hash_conversion"
+                     rsid_col <- if ("SNPID.gwas" %in% names(merged_dt)) "SNPID.gwas"
+                                 else if ("SNP.gwas" %in% names(merged_dt)) "SNP.gwas"
+                                 else if ("SNPID" %in% names(merged_dt)) "SNPID"
+                                 else if ("SNP" %in% names(merged_dt)) "SNP"
+                                 else NULL
+                     
+                     if (!is.null(rsid_col)) {
+                         merged_dt$snp <- merged_dt[[rsid_col]]
+                         message(glue("  Using {rsid_col} for SNP column"))
+                     } else {
                          setnames(merged_dt, "gwas_chrpos_id", "snp")
-                    }
-                }
+                     }
+                     
+                     snp_sample <- head(merged_dt$snp[!is.na(merged_dt$snp)], 3)
+                     if (length(snp_sample) > 0 && !all(grepl("^rs", snp_sample))) {
+                         message(glue("  [WARN] SNP not in rsID format: {paste(snp_sample, collapse=', ')}"))
+                     }
+                 }
             }
         }
     }
@@ -297,7 +310,6 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
             # Mark flipped SNPs
             if (nrow(merged_flip) > 0) {
                 merged_flip$allele_flipped <- TRUE
-                # Safe flip: check if column exists before flipping
                 if ("BETA.qtl" %in% names(merged_flip)) {
                     merged_flip$BETA.qtl <- -merged_flip$BETA.qtl
                 }
@@ -308,22 +320,28 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
 
             merged_dt <- rbindlist(list(merged_forward, merged_flip), fill = TRUE, use.names = TRUE)
 
-            if (nrow(merged_dt) > 0) {
-                message(glue("  ✓ Position+Allele match: {nrow(merged_dt)} SNPs"))
-                message(glue("    (Forward: {nrow(merged_forward)}, Flipped: {nrow(merged_flip)})"))
-                merge_strategy <- "pos_allele"
-                
-                # Assign 'snp' column
-                if ("SNPID" %in% names(gwas_df)) {
-                    # Try to map back to rsID using variant_id
-                    # This assumes variant_id is unique enough for lookup or just use first match
-                    idx <- match(merged_dt$variant_id, gwas_df$variant_id)
-                    merged_dt$snp <- gwas_df$SNPID[idx]
-                    merged_dt$snp[is.na(merged_dt$snp)] <- merged_dt$variant_id[is.na(merged_dt$snp)]
-                } else {
-                    merged_dt$snp <- merged_dt$variant_id
-                }
-            }
+             if (nrow(merged_dt) > 0) {
+                 message(glue("  ✓ Position+Allele match: {nrow(merged_dt)} SNPs"))
+                 message(glue("    (Forward: {nrow(merged_forward)}, Flipped: {nrow(merged_flip)})"))
+                 merge_strategy <- "pos_allele"
+                 if ("SNPID.gwas" %in% names(merged_dt)) {
+                     merged_dt$snp <- merged_dt$SNPID.gwas
+                     message("  Using SNPID.gwas for SNP column")
+                 } else if ("SNP.gwas" %in% names(merged_dt)) {
+                     merged_dt$snp <- merged_dt$SNP.gwas
+                     message("  Using SNP.gwas for SNP column")
+                 } else if ("rsid.gwas" %in% names(merged_dt)) {
+                     merged_dt$snp <- merged_dt$rsid.gwas
+                     message("  Using rsid.gwas for SNP column")
+                 } else {
+                     merged_dt$snp <- merged_dt$variant_id
+                     message("  No rsID column found, using variant_id")
+                 }
+                 snp_sample <- head(merged_dt$snp[!is.na(merged_dt$snp)], 3)
+                 if (length(snp_sample) > 0 && !all(grepl("^rs", snp_sample))) {
+                     message(glue("  [WARN] SNP not in rsID format: {paste(snp_sample, collapse=', ')}"))
+                 }
+             }
         }
     }
 
@@ -331,8 +349,10 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         stop("*** MERGE FAILED: No overlapping SNPs found using any strategy! ***")
     }
 
-  message(glue("Merged dataset: {nrow(merged_dt)} SNPs"))
-    p_gwas <- paste0(gwas_cols$pval, ".gwas")
+   message(glue("Merged dataset: {nrow(merged_dt)} SNPs"))
+   message(glue("  SNP column sample: {paste(head(merged_dt$snp, 5), collapse=', ')}"))
+
+     p_gwas <- paste0(gwas_cols$pval, ".gwas")
     p_qtl  <- paste0(qtl_cols$pval, ".qtl")
 
     for (p_col in c(p_gwas, p_qtl)) {

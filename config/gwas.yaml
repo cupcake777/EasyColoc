@@ -1,32 +1,33 @@
 # =========
 # gwas.yaml
 # =========
+# GWAS summary statistics configuration
 
-# Datasets List
 datasets:
-  - id: "Asian_SCZ"
-    name: "Asian SCZ"
-    file: "/home/ycl/share_group_folder/ref/PGC3_SCZ_wave3.asian.autosome.public.v3.txt"
+  - id: "MyGWAS"
+    name: "My GWAS Study"
+    file: "/path/to/gwas_summary_stats.txt"
     build: "hg19"
-    type: "cc" # "cc" (Case-Control) or "quant" (Quantitative)
+    type: "cc"
     sample_size_n: null
-    prop: 0.455 # Case proportion (Type="cc" required)
-    
-    # columns mapping
+    prop: 0.5
+
     columns:
-      snp: "ID"
-      chrom: "CHROM"
+      snp: "SNP"
+      chrom: "CHR"
       pos: "POS"
       a1: "A1"
       a2: "A2"
-      pval: "PVAL"
+      pval: "P"
       n: "N"
       maf: "MAF"
       beta: "BETA"
       se: "SE"
 
-  # example to add more data
-  # - id: "dataset02"
-  #   name: "Another Trait"
-  #   file: "/path/to/summary_stats.txt"
+  # Example: Add another GWAS dataset
+  # - id: "UKBB_T2D"
+  #   name: "UKBB Type 2 Diabetes"
+  #   file: "/path/to/ukbb_t2d.txt"
+  #   build: "hg38"
+  #   type: "quant"
   #   ...

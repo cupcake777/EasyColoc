@@ -1,9 +1,4 @@
 #!/usr/bin/env Rscript
-
-# ------------------------------------------------------------------------------
-# run_coloc.R 
-# ------------------------------------------------------------------------------
-
 suppressPackageStartupMessages({
   library(data.table)
   library(dplyr)
@@ -15,10 +10,10 @@ suppressPackageStartupMessages({
   library(org.Hs.eg.db)
   library(jsonlite)
 })
+message("==============================================================")
+message("EasyColoc v1.0 - Colocalization Analysis Pipeline")
+message("==============================================================")
 
-# ==============================================================================
-# 1. Initialization
-# ==============================================================================
 message("[INIT] Loading Utility Modules...")
 utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
 sapply(utils_files, source)
@@ -27,28 +22,22 @@ cfg_global <- read_yaml("config/global.yaml")
 cfg_gwas   <- read_yaml("config/gwas.yaml")
 cfg_qtl    <- read_yaml("config/qtl.yaml")
 
-# Read PP4 threshold from config (default to 0.8 if missing)
 coloc_pp4_thresh <- if(!is.null(cfg_global$sig_threshold)) as.numeric(cfg_global$sig_threshold) else 0.8
-message(glue("[INIT] Coloc PP4 Threshold set to: {coloc_pp4_thresh}"))
+message(glue("[INIT] PP4 Threshold: {coloc_pp4_thresh}"))
 
-# Output Dirs
 base_out_dir <- normalizePath(cfg_global$output_dir, mustWork = FALSE)
 dir_abf <- file.path(base_out_dir, "abf")
 dir_susie <- file.path(base_out_dir, "susie")
 dir_plots <- file.path(base_out_dir, "plots")
 for(d in c(base_out_dir, dir_abf, dir_susie, dir_plots)) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
 
-message(glue("[INIT] Output directories ready: {base_out_dir}"))
+message(glue("[INIT] Output: {base_out_dir}"))
 
-# Hash Table Init
 hash_available <- FALSE
 if (!is.null(cfg_global$hash_table_dir) && dir.exists(cfg_global$hash_table_dir)) {
     hash_available <- initialize_hash_system(cfg_global$hash_table_dir)
 }
 
-# ==============================================================================
-# 2. Helpers (Locus Identification)
-# ==============================================================================
 identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col,
                           plink_bfile = NULL, plink_bin = "plink",
                           sig_thresh = 1e-6, clump_kb = 1000, clump_r2 = 0.2) {
@@ -59,12 +48,10 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col,
     sig_dt <- sumstats_dt[sumstats_dt[[p_col]] <= sig_thresh, ]
     if (nrow(sig_dt) == 0) { warning("No significant SNPs."); return(NULL) }
 
-    # PLINK Clumping (Preferred)
     if (!is.null(plink_bfile)) {
         message(glue("        Using PLINK clumping with: {basename(plink_bfile)}"))
         temp_assoc <- tempfile(fileext = ".qassoc"); temp_prefix <- tempfile()
 
-        # Ensure unique SNPs for clumping input
         clump_input <- sig_dt[!duplicated(sig_dt[[snp_col]]), ]
         fwrite(clump_input[, .(SNP = get(snp_col), P = get(p_col))], temp_assoc, sep = "\t", quote = FALSE)
 
@@ -82,7 +69,7 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col,
                 loci <- list()
                 for(i in 1:nrow(clump_res)) {
                     lead_snp <- clump_res$SNP[i]
-                    row <- sig_dt[sig_dt[[snp_col]] == lead_snp, ][1] # Take first if dup
+                    row <- sig_dt[sig_dt[[snp_col]] == lead_snp, ][1]
                     if(nrow(row) > 0) {
                         loci[[i]] <- list(
                             chrom = as.character(row[[chrom_col]]),
@@ -98,7 +85,6 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col,
         unlink(c(temp_assoc, paste0(temp_prefix, "*")))
     }
 
-    # Fallback: Distance Pruning
     message("        Fallback to distance pruning...")
     sig_dt <- sig_dt[order(sig_dt[[p_col]]), ]
     loci <- list()
@@ -110,14 +96,14 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col,
     return(loci)
 }
 
-# ==============================================================================
-# 3. Main Execution
-# ==============================================================================
 
 run_pipeline <- function() {
 
   qtl_meta <- fread(cfg_qtl$qtl_info$file)
   message(glue("[DATA] Loaded {nrow(qtl_meta)} QTL datasets."))
+
+  n_cores <- if(cfg_global$use_parallel) parallel::detectCores() - 1 else 1
+  message(glue("[INIT] Using {n_cores} CPU cores"))
 
   for (gwas_cfg in cfg_gwas$datasets) {
       separator <- strrep("=", 50)
@@ -125,29 +111,27 @@ run_pipeline <- function() {
 
       if (!file.exists(gwas_cfg$file)) { warning(glue("File missing: {gwas_cfg$file}")); next }
 
-      # ---------------------------------------------------------
-      # 1. Load & Harmonize & LiftOver (to hg38)
-      # ---------------------------------------------------------
       gwas_raw <- fread(gwas_cfg$file)
       gwas_std <- format_sumstats(gwas_raw, type="gwas", col_map=as.list(gwas_cfg$columns), case_control=(gwas_cfg$type=="cc"))
+      message(glue("[DATA] GWAS columns after format: {paste(names(gwas_std), collapse=', ')}"))
 
-      # Harmonization handles LiftOver if source_build != target_build
-      # We force target_build = "38" so all subsequent analysis is in hg38
       ref_fasta <- if(gwas_cfg$build=="hg19") cfg_global$ref_genome_hg19 else cfg_global$ref_genome_hg38
 
       gwas_harm <- run_gwaslab_harmonization(
            gwas_std,
            ref_fasta = ref_fasta,
            source_build = if(is.null(gwas_cfg$build)) "19" else gsub("hg", "", gwas_cfg$build),
-           target_build = "38", 
+           target_build = "38",
            save_dir = cfg_global$harmonize_dir,
            dataset_id = gwas_cfg$id
       )
-      
-      # Ensure rsID column availability
+      message(glue("[DATA] GWAS columns after harmonization: {paste(names(gwas_harm), collapse=', ')}"))
+
       rsid_col_gwas <- NULL
       if ("rsid" %in% names(gwas_harm)) rsid_col_gwas <- "rsid"
       else if ("SNPID" %in% names(gwas_harm)) rsid_col_gwas <- "SNPID"
+      else if ("SNP" %in% names(gwas_harm)) rsid_col_gwas <- "SNP"
+      message(glue("[DATA] Using rsID column: {rsid_col_gwas}"))
 
       plink_ref_hg38 <- cfg_global$plink_hg38
 
@@ -155,37 +139,27 @@ run_pipeline <- function() {
           gwas_harm,
           p_col="P", snp_col="SNPID", chrom_col="CHR", pos_col="POS",
           plink_bfile=plink_ref_hg38
-          # sig_thresh = 1e-6 # Default used, change if needed
       )
 
       if (is.null(loci_list) || length(loci_list) == 0) { message("No significant loci."); next }
 
-      # ---------------------------------------------------------
-      # 3. Process Each Locus
-      # ---------------------------------------------------------
       for (locus in loci_list) {
           message(glue("\n>>> Locus: {locus$snp} (hg38 chr{locus$chrom}:{locus$pos})"))
 
-          # Locus is already hg38
           query_chrom <- locus$chrom
           query_pos <- locus$pos
-          
-          # Define Window (Flanking distance)
-          # Use 500kb flank (total 1Mb window)
-          flank_bp <- 500000 
+
+          flank_bp <- 500000
           qtl_start <- max(1, query_pos - flank_bp)
           qtl_end   <- query_pos + flank_bp
 
-          # Extract GWAS Subset for this region
           gwas_locus <- gwas_harm %>%
               filter(CHR == query_chrom & POS >= qtl_start & POS <= qtl_end)
 
           if(nrow(gwas_locus) == 0) next
 
-          # Load Recomb Map (hg38) - Using utils_helpers.R function
           recomb_data <- load_recomb_map(query_chrom, qtl_start, qtl_end, cfg_global$recom)
 
-          # Process QTLs
           process_qtl_wrapper <- function(row_idx) {
               tryCatch({
                   meta_row <- qtl_meta[row_idx, ]
@@ -193,7 +167,6 @@ run_pipeline <- function() {
                   qtl_file <- file.path(cfg_qtl$qtl_info$base_dir, meta_row[[ cfg_qtl$qtl_info$columns$all_filename ]])
                   qtl_n <- as.numeric(meta_row[[ cfg_qtl$qtl_info$columns$sample_size ]])
 
-                  # Tabix Extract (hg38)
                   qtl_raw <- query_tabix_region(qtl_file, query_chrom, qtl_start, qtl_end)
                   if (is.null(qtl_raw) || nrow(qtl_raw) == 0) return(NULL)
                   if (ncol(qtl_raw) == length(cfg_qtl$QTL_all_header)) colnames(qtl_raw) <- cfg_qtl$QTL_all_header
@@ -207,15 +180,12 @@ run_pipeline <- function() {
                       qtl_sub <- if(pheno=="Combined") qtl_raw else qtl_raw[qtl_raw[[pheno_col]] == pheno, ]
                       qtl_std <- format_sumstats(qtl_sub, type="qtl", col_map=as.list(cfg_qtl$QTL_cols))
 
-                      # Prepare QTL rsID
                       if(!is.null(rsid_col_gwas)) gwas_locus$rsid <- gwas_locus[[rsid_col_gwas]]
-                      
-                      # Try to find rsID in QTL
-                      if ("variant_id" %in% names(qtl_std)) qtl_std$rsid <- qtl_std$variant_id # Fallback
+
+                      if ("variant_id" %in% names(qtl_std)) qtl_std$rsid <- qtl_std$variant_id
                       if ("snp" %in% names(qtl_std) && any(grepl("^rs", qtl_std$snp[1:min(5,nrow(qtl_std))]))) qtl_std$rsid <- qtl_std$snp
                       if ("SNPID" %in% names(qtl_std) && any(grepl("^rs", qtl_std$SNPID[1:min(5,nrow(qtl_std))]))) qtl_std$rsid <- qtl_std$SNPID
 
-                      # Merge
                       input_data <- prep_coloc_input_file(
                           gwas_locus, qtl_std,
                           list(pval="P", beta="BETA", se="SE", n="N"),
@@ -223,15 +193,15 @@ run_pipeline <- function() {
                           use_hash_table = hash_available
                       )
 
+                      message(glue("  [RUNNING] input_data SNP sample: {paste(head(input_data$snp, 5), collapse=', ')}"))
+
                       if(nrow(input_data) < 30) next
 
-                      # Analysis
-                      res <- get_coloc_results(input_data, gwas_cfg$type, gwas_cfg$prop, NULL, qtl_n, 
+                      res <- get_coloc_results(input_data, gwas_cfg$type, gwas_cfg$prop, NULL, qtl_n,
                                                plink_bfile = plink_ref_hg38, plink_bin = "plink", use_susie=TRUE)
 
                       pp4 <- res$summary["PP.H4.abf"]
 
-                      # Symbol Mapping
                       gene_sym <- pheno
                       try({
                           base <- gsub("\\..*", "", pheno)
@@ -239,15 +209,12 @@ run_pipeline <- function() {
                           if(nrow(s) > 0) gene_sym <- s$SYMBOL[1]
                       }, silent=TRUE)
 
-                      # Save SuSiE
                       if (!is.null(res$susie_result) && !is.null(res$susie_result$summary) && nrow(res$susie_result$summary)>0) {
                           fname <- gsub("[:/]", "_", glue("{gwas_cfg$id}_{qtl_id}_{gene_sym}_{locus$snp}_susie.csv"))
                           fwrite(as.data.frame(res$susie_result$summary), file.path(dir_susie, fname))
                       }
 
-                      # Plot
                       if(!is.na(pp4) && pp4 > coloc_pp4_thresh) {
-                          # Set globals for plot function
                           assign("lead_SNP", locus$snp, envir=.GlobalEnv)
                           assign("geneSymbol", gene_sym, envir=.GlobalEnv)
                           assign("tissue", qtl_id, envir=.GlobalEnv)
@@ -273,7 +240,7 @@ run_pipeline <- function() {
               }, error=function(e) return(NULL))
           }
 
-          locus_results <- mclapply(1:nrow(qtl_meta), process_qtl_wrapper, mc.cores = if(cfg_global$use_parallel) parallel::detectCores()-1 else 1)
+          locus_results <- mclapply(1:nrow(qtl_meta), process_qtl_wrapper, mc.cores = n_cores)
           final_dt <- rbindlist(locus_results, fill=TRUE)
 
           if(nrow(final_dt) > 0) {
@@ -286,3 +253,7 @@ run_pipeline <- function() {
 }
 
 run_pipeline()
+
+message("==============================================================")
+message("EasyColoc Analysis Complete!")
+message("==============================================================")

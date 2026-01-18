@@ -1,18 +1,36 @@
 # ===========
 # global.yaml
 # ===========
-output_dir: "/home/ycl/work/coloc/test/results"
+# Global configuration for EasyColoc
+
+output_dir: "./tests/results"
 sig_threshold: 0.8
 use_parallel: true
-# liftover ref
-chain_file: "/home/ycl/share_group_folder/ref" # contains hg19ToHg38/hg38ToHg19.over.chain.gz eg.
-# 1000 Genomes Reference (PLINK format)
-plink_hg19: "/home/ycl/share_group_folder/ref/1KG/hg19/1kg_hg19_final_clean" # no suffix
-plink_hg38: "/home/ycl/share_group_folder/ref/1KG/plink/1kg_hg38_filtered"
-plink_keep: "/home/ycl/share_group_folder/ref/1KG/EAS.sample"
-hash_table_dir: "/home/ycl/work/coloc/snp_ref"
-recom: "/home/ycl/work/coloc/recombination/hg38/CHB/CHB"
-gene_anno: "/home/ycl/share_group_folder/ref/gencode.v40.annotation.gtf"
-ref_genome_hg19: "/home/ycl/share_group_folder/ref/GRCh37.primary_assembly.genome.fa"
-ref_genome_hg38: "/home/ycl/share_group_folder/ref/GRCh38.primary_assembly.genome.fa"
-harmonize_dir: "/home/ycl/work/coloc/test/harmony"
+n_cores: 8
+
+# Reference data paths (replace with your local paths)
+# 1000 Genomes Reference (PLINK format, without suffix)
+plink_hg19: "/path/to/1kg_hg19/1kg_hg19_final_clean"
+plink_hg38: "/path/to/1kg_hg38/1kg_hg38_filtered"
+
+# Optional: subset samples for LD calculation
+plink_keep: "/path/to/1kg_eas.sample"
+
+# SNP hash table directory (for rsID ↔ position conversion)
+hash_table_dir: "/path/to/snp_hash_tables/"
+
+# Recombination maps
+recom: "/path/to/recombination/hg38/CHB/CHB"
+
+# Gene annotation (GENCODE GTF)
+gene_anno: "/path/to/gencode.v43.gtf"
+
+# Reference genomes (FASTA)
+ref_genome_hg19: "/path/to/GRCh37.primary_assembly.genome.fa"
+ref_genome_hg38: "/path/to/GRCh38.primary_assembly.genome.fa"
+
+# liftOver chain files (for build conversion)
+chain_dir: "/path/to/liftOver/"
+
+# Harmonzied data cache
+harmonize_dir: "./harmony"

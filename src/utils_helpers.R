@@ -9,10 +9,6 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
-# ==============================================================================
-# 1. Debug & Logging
-# ==============================================================================
-
 print_config_settings <- function() {
     if (getOption("coloc_config_printed", default = FALSE)) {
         return(invisible(NULL))
@@ -53,10 +49,6 @@ print_config_settings <- function() {
     options(coloc_config_printed = TRUE)
 }
 
-# ==============================================================================
-# 2. LiftOver Utilities
-# ==============================================================================
-
 get_liftover_point <- function(chrom, pos, chain_file) {
     if (is.null(chain_file) || !file.exists(chain_file)) stop("LiftOver chain file not found.")
 
@@ -92,10 +84,6 @@ get_liftover_point <- function(chrom, pos, chain_file) {
         pos = res_df$end[1]
     ))
 }
-
-# ==============================================================================
-# 3. Recombination Map Loader
-# ==============================================================================
 
 load_recomb_map <- function(chrom, start, end, recomb_prefix) {
     if (is.null(recomb_prefix)) return(NULL)

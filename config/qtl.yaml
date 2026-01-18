@@ -1,17 +1,21 @@
 # ========
 # qtl.yaml
 # ========
+# QTL data configuration
+
 qtl_info:
-  file: "/home/ycl/work/coloc/test/QTL_summary.csv"
-  base_dir: "/home/ycl/work/coloc/qtl"
+  file: "./QTL_summary.csv"
+  base_dir: "/path/to/qtl_data"
   columns:
-    id: "Type" #发现type其实也可以 因为我每种类型的QTL只会有一套数据
-    sample_size: "NumberRNASeqandGTSamples" 
+    id: "Type"
+    sample_size: "NumberRNASeqandGTSamples"
     all_filename: "allPairsTabixFilename"
     sig_filename: "sigPairsTabixFilename"
-data_dir: "/home/ycl/work/coloc/qtl"
+
+data_dir: "/path/to/qtl"
 QTL_sig_pheno_col: 6
 build: "hg38"
+
 QTL_all_header:
   - "chr"
   - "start"

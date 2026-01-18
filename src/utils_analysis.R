@@ -1,4 +1,6 @@
-# ... (Part 1 unchanged) ...
+# ------------------------------------------------------------------------------
+# src/utils_analysis.R
+# ------------------------------------------------------------------------------
 suppressPackageStartupMessages({
   library(coloc)
   library(data.table)
@@ -6,7 +8,6 @@ suppressPackageStartupMessages({
   library(susieR)
 })
 
-# ... (find_lead_snp, find_best_lead_snp_in_ld unchanged) ...
 find_lead_snp <- function(df, p_col = "P.gwas", snp_col = "snp") {
     if (!p_col %in% names(df)) stop(paste("Column", p_col, "not found"))
     df %>% arrange(.data[[p_col]]) %>% slice(1)
@@ -25,12 +26,7 @@ find_best_lead_snp_in_ld <- function(df, p_col = "P.gwas", snp_col = "snp", plin
     return(best)
 }
 
-# ==============================================================================
-# 2. Coloc Analysis
-# ==============================================================================
-
-get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink") {
-    
+get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink") { 
     get_clean_maf <- function(df, suffix) {
         candidates <- c(paste0("EAF", suffix), paste0("MAF", suffix), paste0("af", suffix))
         if (suffix == ".gwas") candidates <- c(candidates, "EAF", "MAF", "af")
@@ -60,13 +56,10 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
         return(res_abf)
     }
     
-    message(sprintf("  -> Strong signal detected (PP.H4 = %.4f). Attempting SuSiE...", pp4))
+    message(sprintf("  -> Strong signal detected (PP.H4 = %.4f). Running SuSiE...", pp4))
     
     if (!exists("get_ld_matrix") || is.null(plink_bfile)) { warning("LD tools missing. Skipping SuSiE."); return(res_abf) }
-    
-    # [DEBUG] Check ID format
-    # message(glue("     [SuSiE] Checking LD for {length(d1$snp)} SNPs. First 5 IDs: {paste(head(d1$snp, 5), collapse=', ')}"))
-    
+     
     ld_res <- get_ld_matrix(d1$snp, plink_bfile, plink_bin)
     
     if (is.null(ld_res) || is.null(ld_res$R)) { 
@@ -75,7 +68,7 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
     }
     
     common_snps <- intersect(d1$snp, colnames(ld_res$R))
-    if (length(common_snps) < 10) { 
+    if (length(common_snps) < 5) { 
         warning(glue("Too few overlapping SNPs ({length(common_snps)}) between data and LD ref. Skipping SuSiE."))
         return(res_abf) 
     }
