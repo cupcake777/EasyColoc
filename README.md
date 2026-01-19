@@ -130,12 +130,12 @@ hash_table_dir: "/path/to/snp_hash_tables/"
 
 Sample test data is available for download to help you get started:
 
-- **Dropbox**: [EasyColoc Test Data](https://www.dropbox.com/sh/example)
+- **Dropbox**: [EasyColoc Test Data](https://www.dropbox.com/scl/fi/r27ura8jr83j6yoo26phn/test_data.tar.xz?rlkey=mpzjcnejmf2rzxnwyfsvbtd1y&st=4x7k63zj&dl=0)
 - Contains: Sample GWAS summary stats, QTL data.
 
 ```bash
 # Download and extract test data
-wget https://www.dropbox.com/sh/example/test_data.tar.xz
+wget https://www.dropbox.com/scl/fi/r27ura8jr83j6yoo26phn/test_data.tar.xz?rlkey=mpzjcnejmf2rzxnwyfsvbtd1y&st=4x7k63zj&dl=0
 tar -xf test_data.tar.xz -C /path/to/EasyColoc/data/
 ```
 
