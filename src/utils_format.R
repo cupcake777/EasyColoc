@@ -46,7 +46,8 @@ format_sumstats <- function(df, type, col_map, case_control = FALSE) {
     se   = "SE",
     pval = "P",
     n    = "N",
-    maf  = "EAF"
+    maf  = "EAF",
+    af   = "EAF"
   )
 
   for (key in names(col_map)) {
@@ -68,8 +69,12 @@ format_sumstats <- function(df, type, col_map, case_control = FALSE) {
 
 run_gwaslab_harmonization <- function(sumstats_dt,
                                       ref_fasta,
+                                      ref_vcf = NULL,
+                                      ref_dbsnp = NULL,
+                                      ref_alt_freq = "AF",
                                       source_build = "19",
                                       target_build = "38",
+                                      n_threads = 4,
                                       env_name = "gwaslab",
                                       save_dir = NULL,
                                       dataset_id = NULL) {
@@ -108,35 +113,68 @@ run_gwaslab_harmonization <- function(sumstats_dt,
     if (!use_cache && file.exists(output_file)) file.remove(output_file)
   }, add = TRUE)
 
-  fwrite(sumstats_dt, input_file, sep = "\t", na = "NA", quote = FALSE)
+   fwrite(sumstats_dt, input_file, sep = "\t", na = "NA", quote = FALSE)
 
-  # Python script with conditional LiftOver
-  py_code <- glue("
+    # Build VCF path pattern for strand inference
+     vcf_pattern <- if (!is.null(ref_vcf)) ref_vcf else "NULL"
+     dbsnp_pattern <- if (!is.null(ref_dbsnp)) ref_dbsnp else "NULL"
+
+     # Build Python script as a single string to avoid paste0 quote issues
+     py_script <- sprintf('
 import gwaslab as gl
 import pandas as pd
+import numpy as np
 import sys
+
 try:
-    print('Loading sumstats with GWASLab...')
-    mysumstats = gl.Sumstats('{input_file}', fmt='gwaslab', build='{source_build}')
+    print("Loading sumstats with GWASLab...")
+    mysumstats = gl.Sumstats("%s", fmt="gwaslab", build="%s")
     mysumstats.basic_check()
-    
-    print(f'Harmonizing against: {ref_fasta}')
-    mysumstats.harmonize(ref_seq='{ref_fasta}', ref_infer=True, remove=True)
-    src_b = '{source_build}'
-    tgt_b = '{target_build}'
-    
+
+    # Clean numeric columns to prevent type errors in GWASLab
+    for col in mysumstats.data.columns:
+        if mysumstats.data[col].dtype == "object":
+            numeric_converted = pd.to_numeric(mysumstats.data[col], errors="coerce")
+            if numeric_converted.notna().mean() > 0.1:
+                mysumstats.data[col] = numeric_converted
+
+    ref_seq = "%s"
+    ref_rsid_vcf = "%s"
+    ref_infer = "%s"  # Direct path to TSV file (no {chr} pattern needed)
+    ref_af = "%s"
+    src_b = "%s"
+    tgt_b = "%s"
+
+    # Use GWASLab v4 harmonize() function
+    if ref_rsid_vcf != "NULL" or ref_infer != "NULL":
+        print("Running GWASLab harmonization...")
+        mysumstats.harmonize(
+            ref_seq=ref_seq,
+            ref_rsid_vcf=ref_rsid_vcf if ref_rsid_vcf != "NULL" else None,
+            ref_infer=ref_infer,
+            ref_alt_freq=ref_af,
+            sweep_mode=True,
+            threads=%d
+        )
+
+    # Perform LiftOver if needed
     if src_b != tgt_b:
-        print(f'Performing LiftOver from {{src_b}} to {{tgt_b}}...')
-        mysumstats.liftover(n_cores=3, from_build=src_b, to_build=tgt_b, remove=True)
-    
-    mysumstats.data.to_csv('{output_file}', sep='\\t', index=False, float_format='%.6g')
+        print("Performing LiftOver from " + src_b + " to " + tgt_b + "...")
+        mysumstats.liftover(from_build=src_b, to_build=tgt_b, remove=True)
+
+    mysumstats.data.to_csv("%s", sep="\\t", index=False, float_format="%%.6g")
 
 except Exception as e:
-    print(f'Error in GWASLab: {{e}}')
+    print(f"Error in GWASLab: {e}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
-")
+', input_file, source_build,
+   ref_fasta, dbsnp_pattern, vcf_pattern, ref_alt_freq, source_build, target_build,
+   n_threads,
+   output_file)
 
-  writeLines(py_code, py_script_file)
+     writeLines(py_script, py_script_file)
 
   cmd <- glue("micromamba run -n {env_name} python {py_script_file}")
   message("Running Python script...")
@@ -161,14 +199,31 @@ except Exception as e:
 prep_coloc_input_file <- function(gwas_df, qtl_df,
                                   gwas_cols = list(pval="P", beta="BETA", se="SE", n="N"),
                                   qtl_cols = list(pval="pval_nominal", beta="slope", se="slope_se"),
-                                  use_hash_table = TRUE) {
+                                  use_hash_table = TRUE,
+                                  min_snps = 30,
+                                  pvalue_floor = 1e-300) {
 
     message("\n--- MERGING DATA ---")
     gwas_df <- as.data.table(gwas_df)
     qtl_df <- as.data.table(qtl_df)
     message(glue("Input: GWAS={nrow(gwas_df)} SNPs, QTL={nrow(qtl_df)} SNPs"))
-    gwas_has_rsid <- any(c("SNPID", "SNP", "rsid") %in% names(gwas_df))
-    qtl_has_rsid <- any(c("SNPID", "variant_id", "snp") %in% names(qtl_df))
+
+    # Standardize column names for merging
+    # Ensure GWAS has 'rsid' (lowercase), QTL has 'variant_id' (lowercase)
+    # First remove existing 'rsid' if 'rsID' exists, then rename
+    if ("rsID" %in% names(gwas_df)) {
+        if ("rsid" %in% names(gwas_df)) {
+            gwas_df[, rsid := NULL]
+        }
+        setnames(gwas_df, "rsID", "rsid")
+    }
+    if ("variant_id" %in% names(qtl_df) && !"variant_id" %in% names(qtl_df)) {
+        # Already lowercase
+    }
+
+    # Check for rsID columns
+    gwas_has_rsid <- any(tolower(names(gwas_df)) %in% c("snpid", "snp", "rsid"))
+    qtl_has_rsid <- any(tolower(names(qtl_df)) %in% c("snpid", "variant_id", "snp", "rsid"))
 
     gwas_has_pos <- all(c("CHR", "POS") %in% names(gwas_df))
     qtl_has_pos <- all(c("CHR", "POS") %in% names(qtl_df)) ||
@@ -195,22 +250,42 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
     if (gwas_has_rsid && qtl_has_rsid) {
         message("Match SNPs...")
 
-        gwas_id_col <- if ("SNPID" %in% names(gwas_df)) "SNPID" else if ("SNP" %in% names(gwas_df)) "SNP" else "rsid"
-        qtl_id_col <- if ("SNPID" %in% names(qtl_df)) "SNPID" else if ("variant_id" %in% names(qtl_df)) "variant_id" else "snp"
+        # Use rsID format for matching (after standardization)
+        gwas_id_col <- if ("rsid" %in% names(gwas_df)) "rsid" else if ("SNPID" %in% names(gwas_df)) "SNPID" else if ("SNP" %in% names(gwas_df)) "SNP" else "rsid"
+        qtl_id_col <- if ("variant_id" %in% names(qtl_df)) "variant_id" else if ("SNPID" %in% names(qtl_df)) "SNPID" else if ("SNP" %in% names(qtl_df)) "SNP" else "snp"
 
-        gwas_sample <- head(gwas_df[[gwas_id_col]], 3)
-        qtl_sample <- head(qtl_df[[qtl_id_col]], 3)
-        message(glue("  GWAS IDs: {paste(gwas_sample, collapse=', ')}"))
-        message(glue("  QTL IDs:  {paste(qtl_sample, collapse=', ')}"))
+        # Rename duplicate columns BEFORE merging
+        dup_cols <- c("CHR", "POS", "EA", "NEA", "BETA", "SE", "P", "N", "EAF", "AF")
+        for (col in dup_cols) {
+            if (col %in% names(gwas_df) && col %in% names(qtl_df)) {
+                new_name_qtl <- paste0(col, ".qtl")
+                new_name_gwas <- paste0(col, ".gwas")
+                if (!(new_name_qtl %in% names(qtl_df))) {
+                    setnames(qtl_df, col, new_name_qtl)
+                }
+                if (!(new_name_gwas %in% names(gwas_df))) {
+                    setnames(gwas_df, col, new_name_gwas)
+                }
+            }
+        }
 
-        merged_dt <- merge(
-            gwas_df, qtl_df,
-            by.x = gwas_id_col,
-            by.y = qtl_id_col,
-            suffixes = c(".gwas", ".qtl")
-        )
+        # Manual merge to avoid data.table segfault
+        message("  Matching SNPs...")
+        common_snps <- intersect(gwas_df[[gwas_id_col]], qtl_df[[qtl_id_col]])
 
-        if (nrow(merged_dt) > 0) {
+        if (length(common_snps) > 0) {
+            gwas_subset <- gwas_df[gwas_df[[gwas_id_col]] %in% common_snps, ]
+            qtl_subset <- qtl_df[qtl_df[[qtl_id_col]] %in% common_snps, ]
+
+            merged_dt <- merge(
+                gwas_subset,
+                qtl_subset,
+                by.x = gwas_id_col,
+                by.y = qtl_id_col,
+                all = FALSE
+            )
+            merged_dt <- as.data.table(merged_dt)
+
             message(glue("rsID match: {nrow(merged_dt)} SNPs"))
             merge_strategy <- "rsid_direct"
             if ("SNPID.gwas" %in% names(merged_dt)) {
@@ -221,22 +296,23 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
                 merged_dt$snp <- merged_dt$SNPID
             } else if ("SNP" %in% names(merged_dt)) {
                 merged_dt$snp <- merged_dt$SNP
+            } else {
+                merged_dt$snp <- merged_dt[[gwas_id_col]]
             }
-            message(glue("  SNP sample: {paste(head(merged_dt$snp, 3), collapse=', ')}"))
         } else {
             message("No rsID overlap detected")
-            merged_dt <- NULL 
+            merged_dt <- NULL
         }
     }
 
-    if ((is.null(merged_dt) || nrow(merged_dt) < 30) && use_hash_table && exists("convert_rsid_to_chrpos_optimized")) {
+    if ((is.null(merged_dt) || nrow(merged_dt) < min_snps) && use_hash_table && exists("convert_rsid_to_pos")) {
         message("Attempting rsID -> chr_pos conversion...")
-        gwas_id_col <- if ("SNPID" %in% names(gwas_df)) "SNPID" else if ("SNP" %in% names(gwas_df)) "SNP" else if ("rsid" %in% names(gwas_df)) "rsid" else NULL
+        gwas_id_col <- if ("rsid" %in% names(gwas_df)) "rsid" else if ("SNPID" %in% names(gwas_df)) "SNPID" else if ("SNP" %in% names(gwas_df)) "SNP" else NULL
 
         if (!is.null(gwas_id_col) && gwas_has_pos) {
             message("  Converting GWAS rsIDs to chr_pos format...")
             
-            gwas_chrpos <- convert_rsid_to_chrpos_optimized(
+            gwas_chrpos <- convert_rsid_to_pos(
                 gwas_df[[gwas_id_col]],
                 gwas_df$CHR
             )
@@ -248,12 +324,15 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
             qtl_id_col <- if ("variant_id" %in% names(qtl_df)) "variant_id" else if ("snp" %in% names(qtl_df)) "snp" else NULL
 
             if (!is.null(qtl_id_col)) {
-                merged_dt <- merge(
-                    gwas_df, qtl_df,
-                    by.x = "gwas_chrpos_id",
-                    by.y = qtl_id_col,
-                    suffixes = c(".gwas", ".qtl")
+                # Use dplyr to avoid segfault
+                merged_dt <- inner_join(
+                    gwas_df,
+                    qtl_df,
+                    by = c("gwas_chrpos_id" = qtl_id_col),
+                    suffix = c(".gwas", ".qtl"),
+                    relationship = "many-to-many"
                 )
+                merged_dt <- as.data.table(merged_dt)
                 
                  if (nrow(merged_dt) > 0) {
                      message(glue("  ✓ Hash table conversion match: {nrow(merged_dt)} SNPs"))
@@ -279,7 +358,7 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
             }
         }
     }
-    if ((is.null(merged_dt) || nrow(merged_dt) < 30) && gwas_has_pos && qtl_has_pos) {
+    if ((is.null(merged_dt) || nrow(merged_dt) < min_snps) && gwas_has_pos && qtl_has_pos) {
         message("\n[Strategy 3] Attempting position + allele matching...")
         if (gwas_has_allele) {
             gwas_df <- add_variant_id(gwas_df, "CHR", "POS", "EA", "NEA")
@@ -293,25 +372,31 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
 
         if ("variant_id" %in% names(gwas_df) && "variant_id" %in% names(qtl_df)) {
             # Forward Match
-            merged_forward <- merge(
+            merged_forward <- inner_join(
                 gwas_df, qtl_df,
                 by = "variant_id",
-                suffixes = c(".gwas", ".qtl")
+                suffix = c(".gwas", ".qtl"),
+                relationship = "many-to-many"
             )
-            
+            merged_forward <- as.data.table(merged_forward)
+
             # Flip Match
-            merged_flip <- merge(
+            merged_flip <- inner_join(
                 gwas_df, qtl_df,
-                by.x = "variant_id_flip",
-                by.y = "variant_id",
-                suffixes = c(".gwas", ".qtl")
+                by = c("variant_id_flip" = "variant_id"),
+                suffix = c(".gwas", ".qtl"),
+                relationship = "many-to-many"
             )
+            merged_flip <- as.data.table(merged_flip)
 
             # Mark flipped SNPs
             if (nrow(merged_flip) > 0) {
                 merged_flip$allele_flipped <- TRUE
                 if ("BETA.qtl" %in% names(merged_flip)) {
                     merged_flip$BETA.qtl <- -merged_flip$BETA.qtl
+                }
+                if ("BETA.gwas" %in% names(merged_flip)) {
+                    merged_flip$BETA.gwas <- -merged_flip$BETA.gwas
                 }
             }
             if (nrow(merged_forward) > 0) {
@@ -349,32 +434,51 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         stop("*** MERGE FAILED: No overlapping SNPs found using any strategy! ***")
     }
 
-   message(glue("Merged dataset: {nrow(merged_dt)} SNPs"))
-   message(glue("  SNP column sample: {paste(head(merged_dt$snp, 5), collapse=', ')}"))
+    message(glue("Merged dataset: {nrow(merged_dt)} SNPs"))
+    message(glue("  SNP column sample: {paste(head(merged_dt$snp, 5), collapse=', ')}"))
 
-     p_gwas <- paste0(gwas_cols$pval, ".gwas")
+    p_gwas <- paste0(gwas_cols$pval, ".gwas")
     p_qtl  <- paste0(qtl_cols$pval, ".qtl")
 
     for (p_col in c(p_gwas, p_qtl)) {
         if (p_col %in% names(merged_dt)) {
-            # Use data.table assignment for speed/safety
-            merged_dt[get(p_col) == 0, (p_col) := 1e-300]
-            n_fix <- sum(merged_dt[[p_col]] == 1e-300, na.rm=TRUE)
-            if (n_fix > 0) message(glue("  Replaced {n_fix} P=0 values with 1e-300 in {p_col}"))
+            p_values <- merged_dt[[p_col]]
+            needs_floor <- is.na(p_values) | p_values <= 0 | p_values < pvalue_floor
+            n_fix <- sum(needs_floor, na.rm = TRUE)
+            if (n_fix > 0) {
+                merged_dt[needs_floor, (p_col) := pvalue_floor]
+                message(glue("  Replaced {n_fix} P values (NA/<=0/<floor) with {pvalue_floor} in {p_col}"))
+            }
         }
     }
+ 
+    # Fix column names that might have double suffixes
+    # Find and rename columns like "P.gwas.gwas" to "P.gwas"
+    double_suffix_cols <- grep("\\.gwas\\.gwas$|\\.qtl\\.qtl$", names(merged_dt), value = TRUE)
+    if (length(double_suffix_cols) > 0) {
+        message(glue("  Fixing {length(double_suffix_cols)} double-suffix columns..."))
+        for (col in double_suffix_cols) {
+            new_col <- gsub("\\.gwas\\.gwas$", ".gwas", col)
+            new_col <- gsub("\\.qtl\\.qtl$", ".qtl", new_col)
+            setnames(merged_dt, col, new_col)
+        }
+    }
+ 
+    # Find actual P column (GWAS P should be "P", QTL P should be "P.qtl")
+    p_gwas_col <- if ("P" %in% names(merged_dt)) "P" else grep("^P\\.gwas$", names(merged_dt), value = TRUE)[1]
+    if (is.na(p_gwas_col)) {
+        p_gwas_col <- "P"  # Default fallback
+    }
+    message(glue("  Using {p_gwas_col} for deduplication"))
 
-    # Deduplication
+    # Deduplication using data.table
     if (anyDuplicated(merged_dt$snp)) {
         n_dup <- sum(duplicated(merged_dt$snp))
-        message(glue("  Removing {n_dup} duplicate SNPs (keeping lowest P.gwas)..."))
+        message(glue("  Removing {n_dup} duplicate SNPs (keeping lowest {p_gwas_col})..."))
 
-        # Use dplyr syntax but ensure object is compatible
-        merged_dt <- merged_dt %>%
-            group_by(snp) %>%
-            slice_min(order_by = !!sym(p_gwas), n = 1, with_ties = FALSE) %>%
-            ungroup() %>%
-            as.data.table()
+        # Use data.table for deduplication
+        setorderv(merged_dt, p_gwas_col)
+        merged_dt <- merged_dt[!duplicated(merged_dt$snp)]
     }
 
     # Quality Check
@@ -409,12 +513,13 @@ query_tabix_region <- function(tabix_file, chrom, start, end, col_names = NULL) 
   return(dt)
 }
 
-get_ld_matrix <- function(variants, bfile, plink_bin) {
+get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
     if (length(variants) == 0) return(NULL)
     fn <- tempfile(); on.exit(unlink(paste0(fn, "*")), add = TRUE)
     tryCatch({
         fwrite(list(variants), file = fn, col.names = FALSE)
-        cmd <- paste(plink_bin, "--bfile", bfile, "--extract", fn, "--r square --make-just-bim --out", fn, "--silent")
+        keep_cmd <- if (!is.null(keep_file) && file.exists(keep_file)) paste0("--keep ", keep_file) else ""
+        cmd <- paste(plink_bin, "--bfile", bfile, "--extract", fn, keep_cmd, "--r square --make-just-bim --out", fn, "--silent")
         system(cmd, ignore.stdout = TRUE, ignore.stderr = TRUE)
         if (!file.exists(paste0(fn, ".ld"))) return(NULL)
         ld_mat <- as.matrix(fread(paste0(fn, ".ld")))
