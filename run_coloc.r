@@ -66,6 +66,13 @@ pvalue_floor <- if(!is.null(cfg_global$coloc_settings$pvalue_floor)) {
     1.0e-300
 }
 
+# Read coloc priors from config
+coloc_p1 <- if(!is.null(cfg_global$coloc_settings$p1)) as.numeric(cfg_global$coloc_settings$p1) else 1e-4
+coloc_p2 <- if(!is.null(cfg_global$coloc_settings$p2)) as.numeric(cfg_global$coloc_settings$p2) else 1e-4
+coloc_p12 <- if(!is.null(cfg_global$coloc_settings$p12)) as.numeric(cfg_global$coloc_settings$p12) else 5e-6
+
+# Read harmonization settings
+
 # Read harmonization settings
 gwaslab_env <- if(!is.null(cfg_global$harmonization_settings$env_name)) {
     cfg_global$harmonization_settings$env_name
@@ -380,7 +387,10 @@ run_pipeline <- function() {
                             maf_default = maf_default,
                             maf_na_replacement = maf_na_replacement,
                             maf_epsilon = maf_epsilon,
-                            keep_file = cfg_global$plink_keep
+                            keep_file = cfg_global$plink_keep,
+                            p1 = coloc_p1,
+                            p2 = coloc_p2,
+                            p12 = coloc_p12
                         )
                         pp4 <- as.numeric(res$summary["PP.H4.abf"])
                         gene_sym_for_filename <- pheno

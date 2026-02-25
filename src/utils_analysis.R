@@ -26,7 +26,7 @@ find_best_lead_snp_in_ld <- function(df, p_col = "P.gwas", snp_col = "snp", plin
     return(best)
 }
 
-get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink") { 
+get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 5e-6) { 
     get_clean_maf <- function(df, suffix) {
         candidates <- c(paste0("EAF", suffix), paste0("MAF", suffix), paste0("af", suffix))
         if (suffix == ".gwas") candidates <- c(candidates, "EAF", "MAF", "af")
@@ -49,7 +49,7 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
     d2 <- list(snp = as.character(colocInputFile$snp), beta = as.numeric(colocInputFile$BETA.qtl), varbeta = as.numeric(colocInputFile$SE.qtl)^2, pvalues = as.numeric(colocInputFile$P.qtl), type = "quant", N = as.numeric(N_qtl_val), MAF = get_clean_maf(colocInputFile, ".qtl"))
     
     message("Running Coloc ABF...")
-    res_abf <- coloc.abf(d1, d2)
+    res_abf <- coloc.abf(d1, d2, p1 = p1, p2 = p2, p12 = p12)
     pp4 <- as.numeric(res_abf$summary["PP.H4.abf"])
     
     if (!use_susie || is.na(pp4) || pp4 < susie_threshold) {
