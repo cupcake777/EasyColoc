@@ -377,7 +377,7 @@ run_pipeline <- function() {
                             min_snps = min_snps,
                             pvalue_floor = pvalue_floor
                         )
-                        if(nrow(input_data) < 30) next
+                        if(nrow(input_data) < min_snps) next
                         res <- get_coloc_results(
                             input_data, gwas_cfg$type, gwas_cfg$prop, gwas_cfg$sample_size_n, qtl_n,
                             plink_bfile = plink_ref_hg38,
