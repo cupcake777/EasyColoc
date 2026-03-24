@@ -123,7 +123,9 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
                     bfile = NULL, plink_bin = "plink",
                     plot_title = NULL, plot_subtitle = NULL,
                     region_recomb = NULL, xlim = NULL,
-                    show_lead_line = FALSE) {
+                    show_lead_line = FALSE,
+                    colocalized_snp = NULL,
+                    credible_set = NULL) {
 
    df <- safe_df_convert(df)
   if (is.null(df)) {
@@ -263,6 +265,15 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
    message(glue("[LD_plot] Found {high_ld_count} proxy SNPs with r² > 0.2"))
 
    plot_df$is_lead <- plot_df$rsid == lead_snp
+   # Mark credible set SNPs (excluding lead SNP — it has its own styling)
+   cs_snps <- character(0)
+   cs_pp <- numeric(0)
+   if (!is.null(credible_set) && is.data.frame(credible_set) && nrow(credible_set) > 0) {
+       cs_snps <- as.character(credible_set$snp)
+       cs_pp <- credible_set$SNP.PP.H4
+   }
+   plot_df$is_credible <- plot_df$rsid %in% cs_snps & !plot_df$is_lead
+
    plot_df$color_code <- cut(
     plot_df$r2,
     breaks = c(-0.01, 0.2, 0.4, 0.6, 0.8, 1.0),
@@ -271,10 +282,23 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   )
   plot_df$color_code <- as.character(plot_df$color_code)
   plot_df$color_code[plot_df$is_lead] <- "#7F3C8D"
+  plot_df$color_code[plot_df$is_credible] <- "#E67E22"  # orange for credible set
 
   maxlogP <- max(-log10(plot_df$p_value), na.rm = TRUE)
   if (is.infinite(maxlogP) || maxlogP < 1) maxlogP <- 10
+  minlogP <- min(-log10(plot_df$p_value), na.rm = TRUE)
+  if (is.infinite(minlogP) || is.na(minlogP)) minlogP <- 0
+  # Y-axis lower bound: don't always start from 0.
+  # For strong signals (maxlogP > 7), trim the non-informative bottom by starting
+  # from -log10(0.1) = 1. SNPs with p > 0.1 are pure noise in a colocalization
+  # context and trimming them makes the significant region more prominent.
+  if (maxlogP > 5) {
+    ymin_auto <- 1
+  } else {
+    ymin_auto <- 0
+  }
   p <- ggplot()
+  
   if (!is.null(region_recomb) && is.data.frame(region_recomb) && nrow(region_recomb) > 0) {
     r_pos_col <- resolve_col(region_recomb, "Position(bp)", c("position", "pos", "bp"))
     r_rate_col <- resolve_col(region_recomb, "Rate(cM/Mb)", c("rate", "recomb", "cM/Mb"))
@@ -295,12 +319,14 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       if (nrow(region_recomb) > 0) {
         recomb_max <- max(region_recomb$rate_mapped, na.rm = TRUE)
         if (!is.infinite(recomb_max) && recomb_max > 0) {
-          scale_factor <- (maxlogP * 0.85) / recomb_max
-          region_recomb$scaled_rate <- region_recomb$rate_mapped * scale_factor
+          # Scale recombination rate to fit within the visible y-range
+          y_range <- maxlogP * 0.85 - ymin_auto
+          scale_factor <- y_range / recomb_max
+          region_recomb$scaled_rate <- region_recomb$rate_mapped * scale_factor + ymin_auto
 
           p <- p +
             geom_ribbon(data = region_recomb,
-                        aes(x = pos_mapped/1e6, ymin = 0, ymax = scaled_rate),
+                        aes(x = pos_mapped/1e6, ymin = ymin_auto, ymax = pmax(scaled_rate, ymin_auto)),
                         fill = "#DEEBF7", alpha = 0.5, inherit.aes = FALSE) +
             geom_line(data = region_recomb,
                       aes(x = pos_mapped/1e6, y = scaled_rate),
@@ -317,27 +343,126 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
                  linewidth = 0.8, 
                  alpha = 0.6)
   }
+
+  # --- Plot points in 3 layers: background, credible set, lead SNP ---
+  df_bg <- plot_df[!plot_df$is_lead & !plot_df$is_credible, ]
+  df_cs <- plot_df[plot_df$is_credible, ]
+  df_lead <- plot_df[plot_df$is_lead, ]
+
+  # Layer 1: Background SNPs (circles)
+  if (nrow(df_bg) > 0) {
+    p <- p + geom_point(data = df_bg,
+                 aes(x = position/1e6, y = -log10(p_value), fill = color_code),
+                 shape = 21, stroke = 0, size = 2.5, alpha = 0.7)
+  }
+  # Layer 2: Credible set SNPs (circles, orange, slightly larger)
+  # Use aes(fill=color_code) so the fill value goes through scale_fill_identity legend
+  if (nrow(df_cs) > 0) {
+    p <- p + geom_point(data = df_cs,
+                 aes(x = position/1e6, y = -log10(p_value), fill = color_code),
+                 shape = 21, color = "#D35400",
+                 stroke = 0.8, size = 4, alpha = 1)
+  }
+  # Layer 3: Lead SNP (diamond, purple)
+  # Use aes(fill=color_code) so the fill value goes through scale_fill_identity legend
+  if (nrow(df_lead) > 0) {
+    p <- p + geom_point(data = df_lead,
+                 aes(x = position/1e6, y = -log10(p_value), fill = color_code),
+                 shape = 23, color = "#5B2C6F",
+                 stroke = 0.8, size = 5, alpha = 1)
+  }
+
+  p <- p + geom_hline(yintercept = -log10(5e-8), 
+               linetype = "dashed", color = "grey30", linewidth = 0.6)
+  
+  # --- Label lead SNP + credible set SNPs using ggrepel ---
+  label_df <- data.frame(
+    x = numeric(0), y = numeric(0), label = character(0),
+    color = character(0), is_lead = logical(0),
+    stringsAsFactors = FALSE
+  )
+
+  # Add lead SNP label
+  if (nrow(df_lead) > 0) {
+    lead_y <- -log10(df_lead$p_value[1])
+    label_df <- rbind(label_df, data.frame(
+      x = df_lead$position[1]/1e6, y = lead_y,
+      label = lead_snp, color = "#7F3C8D", is_lead = TRUE,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  # Add credible set labels (top 5 by PP.H4)
+  if (nrow(df_cs) > 0 && length(cs_snps) > 0) {
+    max_cs_labels <- min(5, nrow(df_cs))
+    cs_pp_for_sort <- cs_pp[match(df_cs$rsid, cs_snps)]
+    cs_order <- order(-cs_pp_for_sort, na.last = TRUE)
+    df_cs_top <- df_cs[cs_order[seq_len(max_cs_labels)], ]
+    for (i in seq_len(nrow(df_cs_top))) {
+      cs_rsid <- df_cs_top$rsid[i]
+      pp_val <- cs_pp[match(cs_rsid, cs_snps)]
+      pp_label <- if (!is.na(pp_val)) paste0(cs_rsid, " (", sprintf("%.2f", pp_val), ")") else cs_rsid
+      label_df <- rbind(label_df, data.frame(
+        x = df_cs_top$position[i]/1e6,
+        y = -log10(df_cs_top$p_value[i]),
+        label = pp_label, color = "#D35400", is_lead = FALSE,
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+
+  # Use geom_text_repel for all labels with segments
+  if (nrow(label_df) > 0) {
+    p <- p + geom_text_repel(
+      data = label_df,
+      aes(x = x, y = y, label = label),
+      color = label_df$color,
+      size = ifelse(label_df$is_lead, 3.2, 2.8),
+      fontface = "bold",
+      direction = "y",
+      nudge_y = (maxlogP - minlogP) * 0.06,
+      segment.color = "grey50",
+      segment.size = 0.3,
+      segment.linetype = "dotted",
+      min.segment.length = 0.3,
+      box.padding = 0.4,
+      point.padding = 0.3,
+      max.overlaps = 20,
+      force = 2,
+      inherit.aes = FALSE
+    )
+  }
+  
+  # --- Build legend with lead SNP (diamond) + credible set (orange) + LD colors ---
+  ld_colors_all <- c("#D73027", "#FDB863", "#74ADD1", "#4575B4", "#313695")
+  ld_labels_all <- c("0.8 \u2013 1.0", "0.6 \u2013 0.8", "0.4 \u2013 0.6", "0.2 \u2013 0.4", "< 0.2")
+  # Only keep LD bins that actually have SNPs in the data
+  present_ld <- ld_colors_all %in% unique(plot_df$color_code)
+  ld_colors <- ld_colors_all[present_ld]
+  ld_labels <- ld_labels_all[present_ld]
+  # Start with lead SNP (always present)
+  legend_breaks <- c("#7F3C8D", ld_colors)
+  legend_labels <- c("Lead SNP", ld_labels)
+  legend_shapes <- c(23, rep(21, length(ld_colors)))
+  # Add credible set entry if present
+  if (nrow(df_cs) > 0) {
+    legend_breaks <- c(legend_breaks[1], "#E67E22", legend_breaks[-1])
+    legend_labels <- c(legend_labels[1], "95% Credible Set", legend_labels[-1])
+    legend_shapes <- c(23, 21, rep(21, length(ld_colors)))
+  }
   p <- p +
-    geom_point(data = plot_df,
-               aes(x = position/1e6, y = -log10(p_value), 
-                   fill = color_code, size = is_lead, shape = is_lead),
-               alpha = 0.9, stroke = 0.4, color = "white") +
-    geom_hline(yintercept = -log10(5e-8), 
-               linetype = "dashed", color = "grey30", linewidth = 0.6) +
     scale_fill_identity(
       name = expression(italic(r)^2 ~ "with lead SNP"),
-      labels = c("Lead SNP", "0.8 – 1.0", "0.6 – 0.8", "0.4 – 0.6", "0.2 – 0.4", "< 0.2"),
-      breaks = c("#7F3C8D", "#D73027", "#FDB863", "#74ADD1", "#4575B4", "#313695"),
+      labels = legend_labels,
+      breaks = legend_breaks,
       guide = guide_legend(
-        override.aes = list(shape = 21, size = 4, alpha = 1, stroke = 0.4, color = "white"),
+        override.aes = list(shape = legend_shapes, size = 4, alpha = 1, stroke = 0.5),
         title.position = "top",
         title.hjust = 0.5,
-        nrow = 6,
+        nrow = length(legend_breaks),
         byrow = TRUE
       )
     ) +
-    scale_size_manual(values = c(2.5, 6), guide = "none") +
-    scale_shape_manual(values = c(21, 23), guide = "none") +
     labs(
       title = plot_title,
       subtitle = plot_subtitle,
@@ -346,13 +471,13 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
     ) +
     theme_classic(base_size = 11, base_family = "sans") +
     theme(
-      legend.position = "right",
-      legend.justification = c(0, 0.5),
+      legend.position = c(1, 1),
+      legend.justification = c(1, 1),
       legend.title = element_text(size = 10, face = "bold"),
       legend.text = element_text(size = 9),
       legend.key.size = unit(0.7, "lines"),
       legend.key.height = unit(0.8, "lines"),
-      legend.background = element_rect(fill = "white", color = "grey70", linewidth = 0.4),
+      legend.background = element_blank(),
       legend.margin = margin(t = 3, r = 3, b = 3, l = 3),
       legend.box.spacing = unit(0, "pt"),
       axis.line = element_line(color = "black", linewidth = 0.6),
@@ -363,8 +488,8 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       axis.text.y = element_text(size = 10, color = "black"),
       axis.text.x = element_blank(),
       axis.title.y = element_text(size = 11, face = "bold", margin = margin(r = 6)),
-      plot.title = element_text(size = 12, face = "bold", hjust = 0, margin = margin(b = 2)),
-      plot.subtitle = element_text(size = 10, color = "grey30", hjust = 0, margin = margin(b = 4)),
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5, margin = margin(b = 2)),
+      plot.subtitle = element_text(size = 10, color = "grey30", hjust = 0.5, margin = margin(b = 4)),
       plot.margin = margin(t = 8, r = 5, b = 2, l = 8, unit = "pt"),
       panel.background = element_rect(fill = "white"),
       panel.grid.major = element_blank(),
@@ -381,7 +506,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       name = expression(-log[10] ~ italic(P)),
       expand = expansion(mult = c(0, 0.05)),
       sec.axis = sec_axis(
-        ~ . / scale_factor,
+        ~ (. - ymin_auto) / scale_factor,
         name = "Recombination rate (cM/Mb)"
       )
     ) +
@@ -392,6 +517,9 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   } else {
     p <- p + scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
   }
+  
+  ylim <- c(ymin_auto, ceiling(maxlogP * 1.1))
+  p <- p + coord_cartesian(ylim = ylim)
 
   return(p)
 }
@@ -543,13 +671,29 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
     tx_df$strand <- ifelse(tx_df$strand %in% c("+", "-"), tx_df$strand, "+")
     tx_df$y <- 1
     if (nrow(tx_df) > 1) {
+        overlap_margin <- (BPStop - BPStart) * 0.03
         for (i in 2:nrow(tx_df)) {
-            overlap_margin <- (BPStop - BPStart) * 0.03
-            if (tx_df$start[i] < (tx_df$end[i-1] + overlap_margin)) {
-                tx_df$y[i] <- ifelse(tx_df$y[i-1] == 1, 2, 1)
+            # Check overlap against ALL previously placed genes, not just the previous one
+            candidate_y <- 1
+            placed <- TRUE
+            for (level in 1:10) {  # support up to 10 stacking levels
+                conflict <- FALSE
+                for (j in 1:(i-1)) {
+                    if (tx_df$y[j] == level && tx_df$start[i] < (tx_df$end[j] + overlap_margin)) {
+                        conflict <- TRUE
+                        break
+                    }
+                }
+                if (!conflict) {
+                    candidate_y <- level
+                    break
+                }
+                candidate_y <- level + 1
             }
+            tx_df$y[i] <- candidate_y
         }
     }
+    max_y_level <- max(tx_df$y)
     
     tx_df$color <- ifelse(tx_df$strand == "+", "#D73027", "#4575B4")
     p <- ggplot(tx_df)
@@ -581,11 +725,20 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
         linewidth = 1.1
       )
     }
-    p <- p + geom_text(
+    p <- p + geom_text_repel(
       aes(x = (start + end)/2e6, y = y, label = symbol, color = strand),
       size = 3, 
       fontface = "bold.italic",
-      vjust = -1.1,
+      direction = "y",
+      nudge_y = 0.3,
+      segment.color = "grey60",
+      segment.size = 0.25,
+      segment.linetype = "dotted",
+      min.segment.length = 0.2,
+      box.padding = 0.2,
+      point.padding = 0.1,
+      max.overlaps = 30,
+      force = 1.5,
       show.legend = FALSE
     )
     p <- p +
@@ -599,7 +752,7 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
         expand = expansion(mult = c(0.01, 0.01)),
         name = paste0("Position on ", chrom_str, " (Mb)")
       ) +
-      scale_y_continuous(limits = c(0.3, 2.7), expand = c(0, 0)) +
+      scale_y_continuous(limits = c(0.3, max_y_level + 1.2), expand = c(0, 0)) +
       theme_void() +
       theme(
         plot.margin = margin(t = 2, r = 5, b = 8, l = 8, unit = "pt"),
@@ -618,7 +771,13 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
 
 plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
                                  ld_df = NULL, gtf_path = NULL, region_recomb = NULL,
-                                 show_lead_line = FALSE) {
+                                 show_lead_line = FALSE,
+                                 qtl_type = NULL, phenotype_info = NULL,
+                                 significance_threshold = 5e-8,
+                                 significance_label = NULL,
+                                 title_phenotype_field = "gene",
+                                 plot_width = 10, plot_height = 8,
+                                 credible_set = NULL) {
 
     message("[plot_qtl_association] Starting...")
 
@@ -663,6 +822,18 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
 
     chrom_num <- safe_character(leadSNP_DF[[chr_col]])[1]
 
+    # Build title: format 'QTLtype_Phenotypegene' (e.g., 'stage3_apa_ARL3')
+    if (!is.null(qtl_type) && !is.null(phenotype_info)) {
+        plot_title_str <- paste0(qtl_type, "_", gene_sym)
+    } else if (!is.null(qtl_type)) {
+        plot_title_str <- paste0(qtl_type, "_", gene_sym)
+    } else {
+        plot_title_str <- paste(lead_snp_val, "\u2013", gene_sym, "QTL")
+    }
+
+    # Build subtitle: genomic region (e.g., 'chr10:102673231-102676941')
+    plot_subtitle_str <- paste0("chr", chrom_num, ":", format(as.integer(min_pos), big.mark=""), "\u2013", format(as.integer(max_pos), big.mark=""))
+
     p_assoc <- tryCatch({
         LD_plot(
             df = leadSNP_DF,
@@ -670,11 +841,13 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
             lead_snps = lead_snp_val,
             bfile = plink_bfile_val,
             plink_bin = "plink",
-            plot_title = paste(lead_snp_val, "–", gene_sym, "QTL"),
-            plot_subtitle = "eQTL Association (hg38)",
+            plot_title = plot_title_str,
+            plot_subtitle = plot_subtitle_str,
             region_recomb = region_recomb,
             xlim = c(min_pos, max_pos),
-            show_lead_line = show_lead_line
+            show_lead_line = show_lead_line,
+            colocalized_snp = lead_snp_val,
+            credible_set = credible_set
         )
     }, error = function(e) {
         message(glue("[ERROR] LD plot failed: {e$message}"))
@@ -689,7 +862,7 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
     })
     ggarrange(p_assoc, p_track, 
               ncol = 1, 
-              heights = c(3.5, 1.5), 
+              heights = c(3, 1.5), 
               align = "v") 
 }
 
@@ -766,6 +939,6 @@ plot_gwas_association <- function(colocInputFile, qtl_all_chrom, leadSNP_DF,
     })
     ggarrange(p_assoc, p_track, 
               ncol = 1, 
-              heights = c(3.5, 1.5),
+              heights = c(3, 1.5),
               align = "v")
 }

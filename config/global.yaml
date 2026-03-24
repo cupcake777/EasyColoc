@@ -1,66 +1,62 @@
 output_dir: "./results"
+temp_dir: "./temp"              # 临时目录：PLINK中间结果、报错信息等
+log_file: "./results/run_coloc.log"
 sig_threshold: 0.8
 use_parallel: true
 n_cores: 8
-plink_hg19: "/home/lyc/share_group_folder/ref/1KG/hg19/1kg_hg19_filtered"
+verbose: true
 plink_hg38: "/home/lyc/share_group_folder/ref/1KG/hg38/1kg_hg38_filtered"
 plink_keep: "/home/lyc/share_group_folder/ref/1KG/EAS.sample"
-# SNP hash table directory (for rsID ↔ position conversion)
 hash_table_dir: "/home/lyc/share_group_folder/ref/hash_table/"
-# Recombination maps
 recom: "/home/lyc/share_group_folder/ref/recom/hg38/CHB/CHB"
 gene_anno: "/home/lyc/share_group_folder/ref/gencode.v40.annotation.gtf.gz"
-# Reference genomes (FASTA)
 ref_genome_hg19: "/home/lyc/share_group_folder/ref/Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz"
 ref_genome_hg38: "/home/lyc/share_group_folder/ref/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz"
-# for strand inference
 1kg_af: "/home/lyc/share_group_folder/ref/1KG/af_ref"
-# dbsnp for rsID annotation
 dbsnp_hg19: "/home/lyc/share_group_folder/ref/dbsnp/GCF_000001405.25.gz"
 dbsnp_hg38: "/home/lyc/share_group_folder/ref/dbsnp/GCF_000001405.40.gz"
-# Population to AF field mapping in VCF
-chain_dir: "/home/lyc/.gwaslab"
 harmonize_dir: "./harmony"
+work_dir: "./work"
+keep_intermediates: false
+keep_on_error: true
 
-# Clumping parameters for locus identification
 clump:
-  p1: 5e-8       # Primary significance threshold (--clump-p1)
-  p2: 5e-8       # Secondary threshold for clumped SNPs (--clump-p2)
-  r2: 0.1        # LD r^2 threshold (--clump-r2)
-  kb: 1000       # Clumping window in kb (--clump-kb)
+  p1: 1e-7
+  p2: 1e-7
+  r2: 0.2
+  kb: 1000
 
-# =============================================================================
-# Colocalization Analysis Settings
-# =============================================================================
 coloc_settings:
-  pp4_threshold: 0.8          # PP4 threshold for significance (used in merge_all_results)
-  susie_threshold: 0.75       # PP4 threshold to trigger SuSiE fine-mapping
-  min_snps: 30                # Minimum SNPs required for colocalization analysis
-  top_candidates: 100         # Number of top SNPs to consider for LD proxy search
-  maf_default: 0.001          # Default MAF when frequency column is missing
-  maf_na_replacement: 0.001   # MAF value for NA entries
-  maf_epsilon: 1.0e-6         # Minimum MAF threshold (prevents division issues)
-  pvalue_floor: 1.0e-300      # Replacement value for P=0
+  pp4_threshold: 0.7
+  susie_threshold: 0.3
+  min_snps: 10
+  top_candidates: 100
+  maf_default: 0.1
+  maf_na_replacement: 0.05
+  p1: 1.0e-4
+  p2: 1.0e-4
+  p12: 1.0e-5
+  pvalue_floor: 1.0e-300
 
-# =============================================================================
-# Harmonization Settings (GWASLab)
-# =============================================================================
 harmonization_settings:
-  env_name: "gwaslab"         # Conda/mamba environment name for GWASLab
-  # Note: source_build and target_build are derived from gwas.yaml and qtl.yaml
-  # n_threads uses global n_cores setting
+  env_name: "gwaslab"
 
-# =============================================================================
-# Plot Settings
-# =============================================================================
 plot_settings:
-  significance_threshold: 5.0e-8    # GWAS significance line on plots
-  plot_window_bp: 200000          # ±bp window around lead SNP for visualization
-  r2_breaks: [0.2, 0.4, 0.6, 0.8, 1.0]  # LD r^2 color scale breakpoints
-  r2_colors:                      # Colors for each r^2 bin (low to high) - LocusZoom style
-    - "#000080"   # < 0.2 (Navy)
-    - "#87CEEB"   # 0.2-0.4 (Sky Blue)
-    - "#008000"   # 0.4-0.6 (Green)
-    - "#FFA500"   # 0.6-0.8 (Orange)
-    - "#FF0000"   # 0.8-1.0 (Red)
-  lead_snp_color: "#7F3C8D"       # Purple diamond for lead SNP
+  significance_threshold: 5.0e-8
+  plot_window_bp: 200000
+  plot_width: 10           # inches
+  plot_height: 10          # inches (increased for dotplot + genetrack)
+  point_size: 5             # dot size (increased)
+  point_alpha: 0.85          # dot transparency
+  # Title format: which field from QTL phenotype to show
+  # Options: gene (default), transcript, region, or any field from QTL phenotype
+  # Combined as: QTLtype_PhenotypeField (e.g., stage3_apa_ARL3)
+  title_phenotype_field: "gene"
+  r2_breaks: [0.2, 0.4, 0.6, 0.8, 1.0]
+  r2_colors:
+    - "#000080"
+    - "#87CEEB"
+    - "#008000"
+    - "#FFA500"
+    - "#FF0000"
+  lead_snp_color: "#7F3C8D"

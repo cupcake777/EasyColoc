@@ -1,31 +1,37 @@
 # ========
 # qtl.yaml
 # ========
-# QTL data configuration
+# QTL data configuration for colocalization analysis
 
 qtl_info:
-  file: "./QTL_summary.csv"
-  base_dir: "/path/to/qtl_data"
+  # QTL data build version (hg19 or hg38) - required for coordinate matching
+  build: "hg38"
+  # Path to QTL metadata CSV (must contain columns below)
+  file: "/home/lyc/share_group_folder/work/EasyColoc/QTL_summary.csv"
+  # Column mapping in metadata CSV
   columns:
+    # Unique QTL dataset identifier (e.g., "eQTL", "pQTL")
     id: "Type"
+    # Sample size for this QTL dataset
     sample_size: "NumberRNASeqandGTSamples"
-    all_filename: "allPairsTabixFilename"
-    sig_filename: "sigPairsTabixFilename"
+    # Filename column for ALL variant-phenotype pairs
+    all_filename: "allPairsTabixFilename"  # All variant-phenotype pairs (nominal p-values)
+    sig_filename: "sigPairsTabixFilename"  # Permutation-significant phenotypes (gatekeeper filter)
 
-data_dir: "/path/to/qtl"
-QTL_sig_pheno_col: 6
-build: "hg38"
+# ==========================================
+# QTL Tabix File Format Configuration
+# ==========================================
 
+# Column header names in the Tabix files
 QTL_all_header:
   - "chr"
-  - "start"
-  - "end"
+  - "pos"
   - "ref"
   - "alt"
   - "variant_id"
-  - "snp"
   - "phenotype_id"
   - "start_distance"
+  - "end_distance"
   - "af"
   - "ma_samples"
   - "ma_count"
@@ -34,12 +40,9 @@ QTL_all_header:
   - "slope_se"
 
 QTL_cols:
-  phenotype: "phenotype_id"
+  phenotype: "phenotype_id"  # Used for grouping phenotypes
   chrom: "chr"
-  pos: "end"
-  chromEnd: "end"
+  pos: "pos"
   pval: "pval_nominal"
   beta: "slope"
   se: "slope_se"
-  ref: "ref"
-  alt: "alt"

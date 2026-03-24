@@ -1,0 +1,47 @@
+=============================================================
+EasyColoc Analysis Summary
+=============================================================
+Analysis completed: 2026-03-05 08:20:46.882264
+Summary Statistics:
+-------------------------------------------------------------
+                      Metric        Value
+                 total_tests 1.241010e+05
+ significant_colocalizations 1.840000e+02
+          unique_gwas_traits 1.600000e+01
+         unique_qtl_datasets 4.000000e+00
+                 unique_loci 1.413000e+03
+                unique_genes 9.328000e+03
+                    mean_pp4 6.311614e-02
+                  median_pp4 6.622699e-02
+                     max_pp4 9.914502e-01
+                 mean_n_snps 9.066010e+02
+
+
+Top 10 Gene-Locus Pairs by PP4:
+-------------------------------------------------------------
+      GWAS_ID     QTL_ID      Locus
+       <char>     <char>     <char>
+          MDD stage3_apa  rs3782901
+      EUR_BIP stage3_apa rs11551400
+      EAS_SCZ stage3_apa rs10883793
+      EAS_SCZ stage3_apa rs11191379
+      EUR_BIP stage3_apa rs11551400
+      EUR_SCZ stage3_apa rs12303743
+      EAS_SCZ stage1_apa rs11191379
+ Intelligence stage3_apa  rs7921305
+      EAS_SCZ stage1_apa rs10883793
+      EUR_SCZ stage3_apa   rs764284
+                                             Gene       PP4 n_snps
+                                           <char>     <num>  <int>
+ XM_011537925.3|SPPL3|chr12:120762510-120765070|- 0.9914502   1160
+ XM_047445341.1|ANKRD36B|chr2:97507622-97509733|- 0.9861929    149
+  XM_017016260.2|ARL3|chr10:102673731-102676941|- 0.9788035   1572
+  XM_017016260.2|ARL3|chr10:102673731-102676941|- 0.9787912   1570
+  XM_047444239.1|ANKRD36|chr2:97247476-97249587|+ 0.9611060    308
+      NM_014999.4|RAB21|chr12:71785531-71800286|+ 0.9593445   1345
+  XM_017016260.2|ARL3|chr10:102673731-102676941|- 0.9586573   1570
+  NM_018461.5|PPP2R2D|chr10:131955684-131959834|+ 0.9585703   1977
+  XM_017016260.2|ARL3|chr10:102673731-102676941|- 0.9580732   1572
+       NM_003541.3|H4C12|chr6:27831174-27831560|- 0.9485926   1146
+
+=============================================================

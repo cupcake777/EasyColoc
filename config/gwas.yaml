@@ -4,14 +4,279 @@
 # GWAS summary statistics configuration
 
 datasets:
-  - id: "MyGWAS"
-    name: "My GWAS Study"
-    file: "/path/to/gwas_summary_stats.txt"
+# --- SCZ ---
+  - id: "EAS_SCZ"
+    name: "EAS_SCZ"
+    file: "/home/lyc/share_group_folder/GWAS/SCZ_hg19_eas.txt.gz"
     build: "hg19"
+    pop: "EAS"
     type: "cc"
-    sample_size_n: null
-    prop: 0.5
+    sample_size_n: 30761
+    prop: 0.4553
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      n: "N"
+      af: "EAF"
+      beta: "BETA"
+      se: "SE"
 
+  - id: "EUR_SCZ"
+    name: "EUR_SCZ"
+    file: "/home/lyc/share_group_folder/GWAS/SCZ_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 130644
+    prop: 0.4086
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      n: "N"
+      af: "EAF"
+      beta: "BETA"
+      se: "SE"
+
+# --- AD ---
+  - id: "EAS_AD"
+    name: "EAS_AD"
+    file: "/home/lyc/share_group_folder/GWAS/AD_hg38_eas.txt.gz"
+    build: "hg38"
+    pop: "EAS"
+    type: "cc"
+    sample_size_n: 969
+    prop: 0.3240
+    columns:
+      snp: "rsid"
+      chrom: "chromosome"
+      pos: "base_pair_location"
+      a1: "effect_allele"
+      a2: "other_allele"
+      pval: "p_value"
+      af: "effect_allele_frequency"
+      beta: "beta"
+      se: "standard_error"
+
+  - id: "EUR_AD"
+    name: "EUR_AD"
+    file: "/home/lyc/share_group_folder/GWAS/AD_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 63926
+    prop: 0.3439
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      beta: "BETA"
+      se: "SE"
+
+# --- ALS ---
+  - id: "EAS_ALS"
+    name: "EAS_ALS"
+    file: "/home/lyc/share_group_folder/GWAS/ALS_hg19_eas.txt.gz"
+    build: "hg19"
+    pop: "EAS"
+    type: "cc"
+    sample_size_n: 4084
+    prop: 0.3022
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "AF"
+      beta: "EFFECT"
+      se: "SE"
+
+# --- BD ---
+  - id: "EAS_BIP"
+    name: "EAS_BIP"
+    file: "/home/lyc/share_group_folder/GWAS/BIP_hg19_eas.txt.gz"
+    build: "hg19"
+    pop: "EAS"
+    type: "cc"
+    sample_size_n: 151880
+    prop: 0.0393
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "AF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+  - id: "EUR_BIP"
+    name: "EUR_BIP"
+    file: "/home/lyc/share_group_folder/GWAS/BIP_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 2454385
+    prop: 0.0538
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "AF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+# --- PD ---
+  - id: "EAS_PD"
+    name: "EAS_PD"
+    file: "/home/lyc/share_group_folder/GWAS/PD_hg19_eas.txt.gz"
+    build: "hg19"
+    pop: "EAS"
+    type: "cc"
+    sample_size_n: 4450
+    prop: 0.4431
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+  - id: "EUR_PD"
+    name: "EUR_PD"
+    file: "/home/lyc/share_group_folder/GWAS/PD_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 482730
+    prop: 0.0698
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+# --- Ischemic stroke ---
+  - id: "EAS_AIS"
+    name: "EAS_AIS"
+    file: "/home/lyc/share_group_folder/GWAS/Ischemic_stroke_hg19_eas.txt.gz"
+    build: "hg19"
+    pop: "EAS"
+    type: "cc"
+    sample_size_n: 174686
+    prop: 0.1297
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "AF"
+      beta: "BETA"
+      se: "SE"
+
+# --- ADHD ---
+  - id: "ADHD"
+    name: "EUR_ADHD"
+    file: "/home/lyc/share_group_folder/GWAS/ADHD_hg19_eurmeta.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 225534
+    prop: 0.1716
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "AF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+# --- ASD ---
+  - id: "ASD"
+    name: "EUR_ASD"
+    file: "/home/lyc/share_group_folder/GWAS/ASD_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 46351
+    prop: 0.3966
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      beta: "BETA"
+      se: "SE"
+
+# --- ANX ---
+  - id: "ANX"
+    name: "EUR_ANX"
+    file: "/home/lyc/share_group_folder/GWAS/ANX_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 17310
+    prop: 0.4053
+    columns:
+      snp: "SNPID"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "Allele1"
+      a2: "Allele2"
+      pval: "P.value"
+      af: "Freq1"
+      n: "TotalN"
+      beta: "Effect"
+      se: "StdErr"
+
+# --- INS ---
+  - id: "INS"
+    name: "EUR_INS"
+    file: "/home/lyc/share_group_folder/GWAS/Insomnia_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 113006
+    prop: 0.2866
     columns:
       snp: "SNP"
       chrom: "CHR"
@@ -19,15 +284,69 @@ datasets:
       a1: "A1"
       a2: "A2"
       pval: "P"
-      n: "N"
-      maf: "MAF"
+      af: "EAF"
+      n: "N_analyzed"
       beta: "BETA"
       se: "SE"
 
-  # Example: Add another GWAS dataset
-  # - id: "UKBB_T2D"
-  #   name: "UKBB Type 2 Diabetes"
-  #   file: "/path/to/ukbb_t2d.txt"
-  #   build: "hg38"
-  #   type: "quant"
-  #   ...
+# --- PTSD ---
+  - id: "PTSD"
+    name: "EUR_PTSD"
+    file: "/home/lyc/share_group_folder/GWAS/PTSD_h19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 1222882
+    prop: 0.1263
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+# --- MDD ---
+  - id: "MDD"
+    name: "EUR_MDD"
+    file: "/home/lyc/share_group_folder/GWAS/MDD_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 2000702
+    prop: 0.2060
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      n: "N"
+      beta: "BETA"
+      se: "SE"
+
+# --- INT ---
+  - id: "Intelligence"
+    name: "EUR_INT"
+    file: "/home/lyc/share_group_folder/GWAS/Intel_hg19_eur.txt.gz"
+    build: "hg19"
+    pop: "EUR"
+    type: "quant"
+    sample_size_n: 269867
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "POS"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF_HRC"
+      n: "N_analyzed"
+      beta: "stdBeta"
+      se: "SE"

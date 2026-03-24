@@ -14,6 +14,103 @@ EasyColoc is an R-based pipeline that performs colocalization analysis between G
 - **Interactive Visualization**: LocusZoom-style plots with recombination tracks and gene annotations
 - **Parallel Processing**: Efficient multi-core processing for large datasets
 
+## Data Flow Architecture
+
+EasyColoc uses a **two-pipeline architecture** to handle differences between GWAS and QTL data formats:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         GWAS PIPELINE (Left Side)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+   Raw GWAS Summary Statistics
+   (May have: missing rsID, hg19 coordinates, strand ambiguity)
+           │
+           ▼
+   ┌───────────────────────────┐
+   │  gwaslab Harmonization   │  ← rsID annotation, liftOver hg19→hg38,
+   │  (Python preprocessing)   │    strand flip, allele standardization
+   └───────────────────────────┘
+           │
+           ▼
+   Clean GWAS Data (hg38)
+   ✓ rsID annotated (99.98% coverage)
+   ✓ hg38 coordinates
+   ✓ Standardized alleles (A/C/G/T)
+   Format: rsID-based (e.g., "rs123456")
+           │
+           │
+           ▼
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                    THREE-TIER MATCHING STRATEGY                          │
+   ├─────────────────────────────────────────────────────────────────────────┤
+   │                                                                           │
+   │  [Strategy 1] rsID Direct Match                                          │
+   │  ├─ Try: Match GWAS rsID ↔ QTL rsID                                      │
+   │  └─ Success: ~5% of cases (when QTL provides rsID)                       │
+   │                                                                           │
+   │  [Strategy 2] Hash Table Conversion  ← WHY HASH_TABLE IS NEEDED          │
+   │  ├─ Problem: QTL uses chr:pos (e.g., "1_12345"), GWAS uses rsID          │
+   │  ├─ Solution: rsID → chr:pos conversion via dbSNP hash tables             │
+   │  ├─ Process: Load chromosome-specific RDS → lookup rsID → get position   │
+   │  └─ Success: ~90% of cases (standard QTL sources like GTEx)              │
+   │                                                                           │
+   │  [Strategy 3] Position + Allele Match                                    │
+   │  ├─ Fallback: Match by CHR_POS_EA_NEA variant identifiers                │
+   │  ├─ Handles: Novel variants missing from dbSNP                            │
+   │  └─ Success: ~5% of cases (edge cases + missing rsIDs)                   │
+   │                                                                           │
+   └─────────────────────────────────────────────────────────────────────────┘
+           │
+           ▼
+   Merged Dataset (GWAS + QTL)
+   → Colocalization Analysis (coloc ABF / SuSiE)
+   → Visualization (LocusZoom plots)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          QTL PIPELINE (Right Side)                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+   Raw QTL Data (Tabix-indexed)
+   Source: GTEx, eQTL Catalogue, BLUEPRINT, etc.
+   Format: chr:pos-based (e.g., "1_12345" or "1_12345_A_G")
+           │
+           ▼
+   ┌───────────────────────────┐
+   │   Direct Loading          │  ← NO gwaslab processing
+   │   (Tabix query)           │    (already in standard format)
+   └───────────────────────────┘
+           │
+           ▼
+   Clean QTL Data (hg38)
+   ✓ Chromosome:Position format
+   ✓ hg38 coordinates (by source)
+   ✓ Pre-computed effect sizes
+   Format: chr:pos-based (NO rsID)
+           │
+           └─────────────────────────────────────┐
+                                                 │
+                                                 ▼
+                                    (Merges with GWAS via
+                                     Three-Tier Strategy)
+```
+
+### Key Design Decisions
+
+1. **Why QTL bypasses gwaslab**: QTL consortia (GTEx, eQTL Catalogue) provide pre-harmonized data in standardized chr:pos format. Re-processing would:
+   - Waste computational resources (redundant liftOver)
+   - Risk introducing errors (unnecessary transformations)
+   - Lose consortium-specific quality control
+
+2. **Why hash_table is NOT redundant**: 
+   - **Problem**: GWAS uses rsID ("rs123456"), QTL uses chr:pos ("1_12345")
+   - **Solution**: hash_table bridges the format gap via dbSNP lookups
+   - **When triggered**: Automatically when Strategy 1 (rsID direct match) fails to find ≥30 SNPs
+   - **Performance**: Lazy loading per chromosome (~0.5s lookup time)
+
+3. **Graceful degradation**: If hash_table is unavailable or incomplete:
+   - Falls back to Strategy 3 (position + allele matching)
+   - Ensures pipeline never fails due to missing reference data
+
 ## Installation
 
 ### Environment Setup (Recommended)
@@ -198,10 +295,43 @@ Rscript run_coloc.r
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `output_dir` | Output directory | Required |
-| `sig_threshold` | PP4 threshold for plotting | 0.8 |
 | `use_parallel` | Enable parallel processing | true |
-| `plink_hg38` | hg38 PLINK reference | Required |
-| `hash_table_dir` | rsID conversion tables | Optional |
+| `n_cores` | Number of cores for parallelization | 8 |
+| `plink_hg38` | hg38 PLINK reference prefix | Required |
+| `gene_anno` | Path to gene annotation (GTF) | Required |
+| `hash_table_dir` | rsID conversion tables directory | Optional |
+
+#### Advanced Settings
+
+You can fine-tune analysis and plotting parameters in `config/global.yaml`:
+
+```yaml
+# Clumping parameters (for Locus Identification)
+clump:
+  p1: 5e-8        # Primary P-value threshold (index SNPs)
+  p2: 5e-8        # Secondary P-value threshold (clumped SNPs)
+  r2: 0.1         # LD r^2 threshold
+  kb: 1000        # Clumping window in kb
+
+coloc_settings:
+  p1: 1e-4        # Prior probability a SNP is associated with trait 1
+  p2: 1e-4        # Prior probability a SNP is associated with trait 2
+  p12: 1e-5       # Prior probability a SNP is associated with both traits
+  susie_args:     # Arguments for SuSiE fine-mapping
+    L: 10         # Maximum number of non-zero effects
+
+harmonization_settings:
+  vcf_ref: "/path/to/ref.vcf.gz" # Optional VCF for harmonization
+  target_build: "hg38"           # Target genome build
+
+plot_settings:
+  style: "locuszoom"   # Plot style: "locuszoom" or "classic"
+  width: 10            # Plot width in inches
+  height: 6            # Plot height in inches
+  res: 300             # DPI resolution
+  window: 1000000      # Window size in bp (default 1MB)
+  color_scheme: "navy_red" # LD color scheme
+```
 
 ### GWAS Settings (config/gwas.yaml)
 

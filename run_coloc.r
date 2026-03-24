@@ -22,6 +22,9 @@ cfg_global <- read_yaml("config/global.yaml")
 cfg_gwas   <- read_yaml("config/gwas.yaml")
 cfg_qtl    <- read_yaml("config/qtl.yaml")
 
+# Temp directory for intermediate files (PLINK clump outputs, error logs, etc.)
+temp_dir <- if (!is.null(cfg_global$temp_dir)) cfg_global$temp_dir else "./temp"
+
 # Read colocalization analysis settings
 coloc_pp4_thresh <- if(!is.null(cfg_global$coloc_settings$pp4_threshold)) {
     as.numeric(cfg_global$coloc_settings$pp4_threshold)
@@ -106,6 +109,43 @@ lead_snp_color <- if(!is.null(cfg_global$plot_settings$lead_snp_color)) {
 } else {
     "#7F3C8D"
 }
+# Use clump p1 as significance threshold for plotting (or fall back to plot_settings)
+clump_p1_for_plot <- if(!is.null(cfg_global$clump$p1)) as.numeric(cfg_global$clump$p1) else 5e-8
+plot_sig_threshold <- if(!is.null(cfg_global$plot_settings$significance_threshold)) {
+    as.numeric(cfg_global$plot_settings$significance_threshold)
+} else {
+    clump_p1_for_plot  # Default to clump threshold
+}
+# Generate significance label from threshold
+significance_label <- if(!is.null(cfg_global$plot_settings$significance_label)) {
+    cfg_global$plot_settings$significance_label
+} else {
+    # Auto-generate label from threshold (e.g., 5e-8 -> "5×10⁻⁸")
+    thresh <- plot_sig_threshold
+    if (thresh < 1e-6) {
+        exp_val <- format(thresh, scientific = TRUE)
+        # Convert "5e-08" to "5×10⁻⁸"
+        exp_val <- gsub("e-0?", "×10⁻", exp_val)
+        exp_val <- gsub("^-", "⁻", exp_val)
+    paste0("GWAS ", exp_val)
+    }
+}
+
+plot_width <- if(!is.null(cfg_global$plot_settings$plot_width)) {
+    as.numeric(cfg_global$plot_settings$plot_width)
+} else {
+    10
+}
+plot_height <- if(!is.null(cfg_global$plot_settings$plot_height)) {
+    as.numeric(cfg_global$plot_settings$plot_height)
+} else {
+    8
+}
+title_phenotype_field <- if(!is.null(cfg_global$plot_settings$title_phenotype_field)) {
+    cfg_global$plot_settings$title_phenotype_field
+} else {
+    "gene"
+}
 
 message(glue("[INIT] PP4 Threshold: {coloc_pp4_thresh}"))
 message(glue("[INIT] SuSiE Threshold: {susie_thresh}"))
@@ -116,7 +156,8 @@ base_out_dir <- normalizePath(cfg_global$output_dir, mustWork = FALSE)
 dir_abf <- file.path(base_out_dir, "abf")
 dir_susie <- file.path(base_out_dir, "susie")
 dir_plots <- file.path(base_out_dir, "plots")
-for(d in c(base_out_dir, dir_abf, dir_susie, dir_plots)) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
+dir_rds <- file.path(base_out_dir, "rds")
+for(d in c(base_out_dir, dir_abf, dir_susie, dir_plots, dir_rds)) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
 
 message(glue("[INIT] Output: {base_out_dir}"))
 hash_table <- TRUE
@@ -134,12 +175,10 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
     if (nrow(sig_dt) == 0) { warning("No significant SNPs."); return(NULL) }
      if (!is.null(plink_bfile)) {
         message(glue("        Using PLINK clumping with: {basename(plink_bfile)}"))
-        # DEBUG: Use non-temp files for debugging
-        debug_dir <- "debug_plink"
-        if (!dir.exists(debug_dir)) dir.create(debug_dir, recursive = TRUE)
+        if (!dir.exists(temp_dir)) dir.create(temp_dir, recursive = TRUE)
         ds_id <- if(is.null(dataset_id)) "unknown" else dataset_id
-        temp_assoc <- file.path(debug_dir, glue("clump_input_{ds_id}.qassoc"))
-        temp_prefix <- file.path(debug_dir, glue("clump_output_{ds_id}"))
+        temp_assoc <- file.path(temp_dir, glue("clump_input_{ds_id}.qassoc"))
+        temp_prefix <- file.path(temp_dir, glue("clump_output_{ds_id}"))
 
         clump_input <- sig_dt[!duplicated(sig_dt[[snp_col]]), ]
         clump_write <- clump_input[, c(snp_col, p_col), with=FALSE]
@@ -172,7 +211,7 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
         }
 
         if (sys_result != 0) {
-            warning(glue("[LOCUS] PLINK execution failed (exit code: {sys_result}). Check debug_plink/ directory."))
+            warning(glue("[LOCUS] PLINK execution failed (exit code: {sys_result}). Check {temp_dir}/ directory."))
         } else {
             clump_file <- paste0(temp_prefix, ".clumped")
             if (file.exists(clump_file)) {
@@ -371,8 +410,8 @@ run_pipeline <- function() {
                       if ("variant_id" %in% names(qtl_std)) qtl_std$rsid <- qtl_std$variant_id
                         input_data <- prep_coloc_input_file(
                             gwas_locus, qtl_std,
-                            list(pval="P.gwas", beta="BETA.gwas", se="SE.gwas", n="N.gwas"),
-                            list(pval="P.qtl", beta="BETA.qtl", se="SE.qtl"),
+                            list(pval="P", beta="BETA", se="SE", n="N"),
+                            list(pval="P", beta="BETA", se="SE"),
                             use_hash_table = hash_table,
                             min_snps = min_snps,
                             pvalue_floor = pvalue_floor
@@ -407,44 +446,88 @@ run_pipeline <- function() {
                            }
 
                           if(!is.na(pp4) && pp4 > coloc_pp4_thresh) {
-                             tryCatch({
-                                 assign("lead_SNP", locus$snp, envir = .GlobalEnv)
-                                 assign("geneSymbol", gene_sym_for_filename, envir = .GlobalEnv)
-                                 assign("plink_bfile", plink_ref_hg38, envir = .GlobalEnv)
-                                 assign("trait", gwas_cfg$id, envir = .GlobalEnv)
-                                  p <- plot_qtl_association(
-                                      qtl_all_chrom = "CHR.qtl",
-                                      qtl_all_pvalue = "P.qtl",
-                                      leadSNP_DF = input_data,
-                                      ld_df = NULL,
-                                      gtf_path = cfg_global$gene_anno,
-                                      region_recomb = recomb_data,
-                                      show_lead_line = FALSE,
-                                      plot_window_bp = plot_window_bp,
-                                      significance_threshold = plot_sig_threshold,
-                                      r2_breaks = r2_breaks,
-                                      r2_colors = r2_colors,
-                                      lead_snp_color = lead_snp_color
-                                  )
-                                  pname_pdf <- sanitize_filename(glue("{gwas_cfg$id}_{qtl_id}_{gene_sym_for_filename}_coloc.pdf"))
-                                  pname_png <- sanitize_filename(glue("{gwas_cfg$id}_{qtl_id}_{gene_sym_for_filename}_coloc.png"))
-                                  pdf_path <- file.path(dir_plots, pname_pdf)
-                                  png_path <- file.path(dir_plots, pname_png)
-                                  pdf_saved <- tryCatch({
-                                    ggsave(pdf_path, p, width=12, height=10, device = cairo_pdf)
-                                    TRUE
-                                  }, error = function(e) {
-                                    FALSE
-                                  })
-
-                                  if (!pdf_saved) {
-                                    ggsave(png_path, p, width=10, height=6, dpi=300)
-                                    message(glue("[PLOT] Saved as PNG: {pname_png}"))
-                                  } else {
-                                    message(glue("[PLOT] Saved as PDF: {pname_pdf}"))
+                              credible_set_snps <- NULL
+                              if (!is.null(res$results) && "SNP.PP.H4" %in% names(res$results)) {
+                                  snp_pp <- res$results[order(-res$results$SNP.PP.H4), c("snp", "SNP.PP.H4")]
+                                  snp_pp <- snp_pp[snp_pp$SNP.PP.H4 > 0, ]
+                                  if (nrow(snp_pp) > 0) {
+                                      cumsum_pp <- cumsum(snp_pp$SNP.PP.H4)
+                                      n_in_set <- min(which(cumsum_pp >= 0.95), nrow(snp_pp))
+                                      credible_set_snps <- snp_pp[1:n_in_set, ]
+                                      message(glue("  -> 95% credible set: {nrow(credible_set_snps)} SNP(s) - top: {credible_set_snps$snp[1]} (PP.H4={round(credible_set_snps$SNP.PP.H4[1], 4)})"))
                                   }
-                            }, error=function(e) message(glue("Plot Error: {e$message}")))
-                       }
+                              }
+                              tryCatch({
+                                  assign("lead_SNP", locus$snp, envir = .GlobalEnv)
+                                  assign("geneSymbol", gene_sym_for_filename, envir = .GlobalEnv)
+                                  assign("plink_bfile", plink_ref_hg38, envir = .GlobalEnv)
+                                  assign("trait", gwas_cfg$id, envir = .GlobalEnv)
+                                   p <- plot_qtl_association(
+                                       qtl_all_chrom = "CHR.qtl",
+                                       qtl_all_pvalue = "P.qtl",
+                                       leadSNP_DF = input_data,
+                                       ld_df = NULL,
+                                       gtf_path = cfg_global$gene_anno,
+                                       region_recomb = recomb_data,
+                                       show_lead_line = FALSE,
+                                       qtl_type = qtl_id,
+                                       phenotype_info = pheno,
+                                       significance_threshold = plot_sig_threshold,
+                                       significance_label = significance_label,
+                                       title_phenotype_field = title_phenotype_field,
+                                       plot_width = plot_width,
+                                       plot_height = plot_height,
+                                       credible_set = credible_set_snps
+                                   )
+                                   pname_pdf <- sanitize_filename(glue("{gwas_cfg$id}_{qtl_id}_{gene_sym_for_filename}_coloc.pdf"))
+                                   pname_png <- sanitize_filename(glue("{gwas_cfg$id}_{qtl_id}_{gene_sym_for_filename}_coloc.png"))
+                                   pdf_path <- file.path(dir_plots, pname_pdf)
+                                   png_path <- file.path(dir_plots, pname_png)
+                                   pdf_saved <- tryCatch({
+                                     ggsave(pdf_path, p, width = plot_width, height = plot_height, device = cairo_pdf)
+                                     TRUE
+                                   }, error = function(e) {
+                                     FALSE
+                                   })
+
+                                   if (!pdf_saved) {
+                                     ggsave(png_path, p, width = plot_width * 0.8, height = plot_height * 0.8, dpi = 300)
+                                     message(glue("[PLOT] Saved as PNG: {pname_png}"))
+                                   } else {
+                                     message(glue("[PLOT] Saved as PDF: {pname_pdf}"))
+                                   }
+                            }, error=function(e) { message(glue("Plot Error: {e$message}")) })
+
+                             # Save intermediate data as RDS for summary tool
+                             tryCatch({
+                                 chrom_num <- unique(input_data$CHR.qtl)[1]
+                                  # Extract SuSiE best PP4 (max across credible set pairs)
+                                  susie_best_pp4 <- NA_real_
+                                  susie_summary  <- NULL
+                                  if (!is.null(res$susie_result) && !is.null(res$susie_result$summary) && nrow(res$susie_result$summary) > 0) {
+                                      susie_summary  <- res$susie_result$summary
+                                      susie_best_pp4 <- max(susie_summary$PP.H4.abf, na.rm = TRUE)
+                                  }
+                                  rds_data <- list(
+                                      merged_data    = input_data,
+                                      lead_snp       = locus$snp,
+                                      gene_symbol    = gene_sym_for_filename,
+                                      gwas_id        = gwas_cfg$id,
+                                      qtl_id         = qtl_id,
+                                      chrom          = chrom_num,
+                                      plink_bfile    = plink_ref_hg38,
+                                      credible_set   = credible_set_snps,
+                                      pp4            = pp4,
+                                      susie_best_pp4 = susie_best_pp4,
+                                      susie_summary  = susie_summary
+                                  )
+                                 rds_fname <- sanitize_filename(glue("{gwas_cfg$id}_{qtl_id}_{gene_sym_for_filename}_coloc.rds"))
+                                 saveRDS(rds_data, file.path(dir_rds, rds_fname))
+                                 message(glue("[RDS] Saved: {rds_fname}"))
+                             }, error = function(e) {
+                                 message(glue("[RDS] Save failed: {e$message}"))
+                             })
+                        }
 
                          res_list[[length(res_list)+1]] <- data.table(
                              GWAS_ID=gwas_cfg$id, QTL_ID=qtl_id, Locus=locus$snp, Gene=gene_sym_for_filename, PP4=pp4, n_snps=res$summary["nsnps"]

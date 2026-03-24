@@ -1,0 +1,32 @@
+# R session files
+.Rhistory
+.RData
+.Rproj.user/
+
+# Temporary/cache directories
+temp/*
+harmony/*
+result/*
+
+# PLINK intermediate files
+*.log
+*.qassoc
+*.clumped
+*.nosex
+
+# Debug/test scripts (if regenerated)
+debug_*.R
+test_*.R
+patch_*.R
+scripts/debug/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

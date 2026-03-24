@@ -26,16 +26,16 @@ find_best_lead_snp_in_ld <- function(df, p_col = "P.gwas", snp_col = "snp", plin
     return(best)
 }
 
-get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 5e-6) { 
+get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, maf_default = 0.1, maf_na_replacement = 0.05, maf_epsilon = 1e-6, keep_file = NULL) { 
     get_clean_maf <- function(df, suffix) {
         candidates <- c(paste0("EAF", suffix), paste0("MAF", suffix), paste0("af", suffix))
         if (suffix == ".gwas") candidates <- c(candidates, "EAF", "MAF", "af")
         raw_freq <- NULL
         for (col in candidates) if (col %in% names(df)) { raw_freq <- df[[col]]; break }
-        if (is.null(raw_freq)) return(rep(0.1, nrow(df)))
+        if (is.null(raw_freq)) return(rep(maf_default, nrow(df)))
         freq <- as.numeric(raw_freq); maf <- pmin(freq, 1 - freq)
-        if (any(is.na(maf))) maf[is.na(maf)] <- 0.05
-        epsilon <- 1e-6; maf[maf < epsilon] <- epsilon; maf[maf > (1 - epsilon)] <- 1 - epsilon
+        if (any(is.na(maf))) maf[is.na(maf)] <- maf_na_replacement
+        maf[maf < maf_epsilon] <- maf_epsilon; maf[maf > (1 - maf_epsilon)] <- 1 - maf_epsilon
         return(maf)
     }
 
@@ -58,9 +58,20 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
     
     message(sprintf("  -> Strong signal detected (PP.H4 = %.4f). Running SuSiE...", pp4))
     
-    if (!exists("get_ld_matrix") || is.null(plink_bfile)) { warning("LD tools missing. Skipping SuSiE."); return(res_abf) }
+    # Check if SNPs are in rsID format (required for PLINK)
+    snp_sample <- head(d1$snp, 5)
+    is_rsid_format <- all(grepl("^rs", snp_sample), na.rm = TRUE)
+    if (!is_rsid_format) {
+        message("SNPs not in rsID format - skipping SuSiE (PLINK requires rsIDs)")
+        return(res_abf)
+    }
+    
+    if (!exists("get_ld_matrix") || is.null(plink_bfile)) { 
+        warning("LD tools missing. Skipping SuSiE."); 
+        return(res_abf) 
+    }
      
-    ld_res <- get_ld_matrix(d1$snp, plink_bfile, plink_bin)
+    ld_res <- get_ld_matrix(d1$snp, plink_bfile, plink_bin, keep_file = keep_file)
     
     if (is.null(ld_res) || is.null(ld_res$R)) { 
         warning(glue("LD calculation failed (NULL matrix). Check if SNP IDs (e.g. {d1$snp[1]}) match PLINK reference."))
@@ -86,7 +97,10 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
     susie_1 <- try(susie_rss(bhat = d1_susie$beta, shat = sqrt(d1_susie$varbeta), R = R_susie, n = d1_susie$N[1], verbose = FALSE), silent = TRUE)
     susie_2 <- try(susie_rss(bhat = d2_susie$beta, shat = sqrt(d2_susie$varbeta), R = R_susie, n = d2_susie$N[1], verbose = FALSE), silent = TRUE)
     
-    if (inherits(susie_1, "try-error") || inherits(susie_2, "try-error")) { warning("SuSiE failed to converge."); return(res_abf) }
+    if (inherits(susie_1, "try-error") || inherits(susie_2, "try-error")) { 
+        warning("SuSiE failed to converge."); 
+        return(res_abf) 
+    }
     
     res_susie <- coloc.susie(susie_1, susie_2)
     message("  SuSiE Coloc complete.")

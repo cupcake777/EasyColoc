@@ -1,2 +1,5 @@
 Type,NumberRNASeqandGTSamples,NumberRNASeqSamples,Number_of_sigpheno,allPairsTabixFilename,sigPairsTabixFilename
-eQTL,677,740,13745,/path/to/qtl/chb.allpairs.tab.gz,/path/to/qtl/chb.sigpairs.tab.gz
+stage1_apa,189,222,425,/home/lyc/share_group_folder/work/apa/coloc/stage1_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage1_sig.tab.gz
+stage2_apa,130,182,251,/home/lyc/share_group_folder/work/apa/coloc/stage2_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage2_sig.tab.gz
+stage3_apa,378,412,1231,/home/lyc/share_group_folder/work/apa/coloc/stage3_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage3_sig.tab.gz
+stage4_apa,697,816,196,/home/lyc/share_group_folder/work/apa/coloc/stage4_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage4_sig.tab.gz
