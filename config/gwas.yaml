@@ -311,7 +311,7 @@ datasets:
       se: "SE"
 
   # --- MDD ---
-  - id: EUR_MDD"
+  - id: "EUR_MDD"
     name: "EUR_MDD"
     file: "/home/lyc/share_group_folder/GWAS/MDD_hg19_eur.txt.gz"
     build: "hg19"

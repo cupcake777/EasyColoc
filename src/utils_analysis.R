@@ -8,24 +8,6 @@ suppressPackageStartupMessages({
   library(susieR)
 })
 
-find_lead_snp <- function(df, p_col = "P.gwas", snp_col = "snp") {
-    if (!p_col %in% names(df)) stop(paste("Column", p_col, "not found"))
-    df %>% arrange(.data[[p_col]]) %>% slice(1)
-}
-
-find_best_lead_snp_in_ld <- function(df, p_col = "P.gwas", snp_col = "snp", plink_bfile, plink_bin = "plink") {
-    lead_row <- find_lead_snp(df, p_col, snp_col); lead_snp <- lead_row[[snp_col]]
-    if (!exists("get_ld_matrix")) return(lead_snp)
-    ld_check <- get_ld_matrix(lead_snp, plink_bfile, plink_bin)
-    if (!is.null(ld_check) && nrow(ld_check$R) > 0) return(lead_snp) 
-    top_candidates <- df %>% arrange(.data[[p_col]]) %>% slice(1:100) %>% pull(.data[[snp_col]])
-    ld_proxy <- get_ld_matrix(top_candidates, plink_bfile, plink_bin)
-    if (is.null(ld_proxy) || nrow(ld_proxy$R) == 0) return(lead_snp) 
-    available <- colnames(ld_proxy$R)
-    best <- df %>% filter(.data[[snp_col]] %in% available) %>% arrange(.data[[p_col]]) %>% slice(1) %>% pull(.data[[snp_col]])
-    return(best)
-}
-
 get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, maf_default = 0.1, maf_na_replacement = 0.05, maf_epsilon = 1e-6, keep_file = NULL) { 
     get_clean_maf <- function(df, suffix) {
         candidates <- c(paste0("EAF", suffix), paste0("MAF", suffix), paste0("af", suffix))

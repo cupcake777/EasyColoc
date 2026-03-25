@@ -7,17 +7,13 @@ suppressPackageStartupMessages({
   library(GenomicRanges)
   library(dplyr)
   library(data.table)
-  library(vroom)
   library(glue)
-  library(forcats)
-  library(purrr)
   library(ggrepel)
   library(rtracklayer)
   library(TxDb.Hsapiens.UCSC.hg38.knownGene)
   library(org.Hs.eg.db)
   library(GenomicFeatures)
   library(AnnotationDbi)
-  library(tidyr)
   library(grid)
 })
 
@@ -860,7 +856,7 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
         message(glue("[ERROR] Gene track failed: {e$message}"))
         ggplot() + theme_void()
     })
-    ggarrange(p_assoc, p_track, 
+ggarrange(p_assoc, p_track, 
               ncol = 1, 
               heights = c(3, 1.5), 
               align = "v") 

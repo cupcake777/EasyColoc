@@ -1,10 +1,8 @@
 output_dir: "./results"
 temp_dir: "./temp"
-log_file: "./results/run_coloc.log"
-sig_threshold: 0.8
+sig_threshold: 0.8  # Legacy fallback for coloc_settings.pp4_threshold
 use_parallel: true
 n_cores: 8
-verbose: true
 plink_hg38: "/home/lyc/share_group_folder/ref/1KG/hg38/1kg_hg38_filtered"
 plink_keep: "/home/lyc/share_group_folder/ref/1KG/EAS.sample"
 hash_table_dir: "/home/lyc/share_group_folder/ref/hash_table/"
@@ -16,9 +14,6 @@ ref_genome_hg38: "/home/lyc/share_group_folder/ref/Homo_sapiens.GRCh38.dna.prima
 dbsnp_hg19: "/home/lyc/share_group_folder/ref/dbsnp/GCF_000001405.25.gz"
 dbsnp_hg38: "/home/lyc/share_group_folder/ref/dbsnp/GCF_000001405.40.gz"
 harmonize_dir: "./harmony"
-work_dir: "./work"
-keep_intermediates: false
-keep_on_error: true
 
 clump:
   p1: 1e-7

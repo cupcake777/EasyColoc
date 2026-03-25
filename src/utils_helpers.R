@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 # src/utils_helpers.R
-# Des: print info/liftover/recom
+# Des: filename sanitization, recombination map loading
 # ------------------------------------------------------------------------------
 
 suppressPackageStartupMessages({
@@ -18,82 +18,6 @@ sanitize_filename <- function(filename) {
   # Remove leading/trailing underscores
   sanitized <- gsub("^_|_$", "", sanitized)
   return(sanitized)
-}
-
-print_config_settings <- function() {
-    if (getOption("coloc_config_printed", default = FALSE)) {
-        return(invisible(NULL))
-    }
-    get_var <- function(var_name) {
-        if (exists(var_name, envir = .GlobalEnv)) {
-            val <- get(var_name, envir = .GlobalEnv)
-            if (is.null(val)) return("NULL")
-            return(as.character(val))
-        }
-        return("N/A")
-    }
-
-    cat(glue("
-    ========================================================
-    [CONFIG SUMMARY] {Sys.time()}
-    ========================================================
-    Trait Info:
-      - Name: {get_var('trait')}
-      - File: {basename(get_var('traitFilePath'))}
-      - Type: {get_var('traitType')} (Prop: {get_var('traitProp')})
-
-    Column Mapping (Standardized):
-      - SNP:  {get_var('trait_SNPcol')}
-      - Pval: {get_var('trait_Pcol')}
-      - Beta: {get_var('trait_BETAcol')}
-      - N:    {get_var('trait_Ncol')}
-
-    Locus Info:
-      - Region: Chr {get_var('chrom')}:{get_var('colocStart')} - {get_var('colocStop')}
-      - Lead SNP: {get_var('lead_SNP')}
-      - Build: {get_var('trait_build')}
-
-    System:
-      - LiftOver Chain: {basename(get_var('liftOver_chain'))}
-    ========================================================
-    \n"))
-    options(coloc_config_printed = TRUE)
-}
-
-get_liftover_point <- function(chrom, pos, chain_file) {
-    if (is.null(chain_file) || !file.exists(chain_file)) stop("LiftOver chain file not found.")
-
-    chrom_str <- if (!grepl("^chr", chrom)) paste0("chr", chrom) else chrom
-    
-    bed_df <- data.frame(
-        chr = chrom_str,
-        start = as.integer(pos) - 1,
-        end = as.integer(pos),
-        id = "pt"
-    )
-    
-    f_in <- tempfile(fileext = ".bed")
-    f_out <- tempfile(fileext = ".bed")
-    f_unmapped <- tempfile(fileext = ".unmapped")
-    
-    on.exit({
-        if (file.exists(f_in)) unlink(f_in)
-        if (file.exists(f_out)) unlink(f_out)
-        if (file.exists(f_unmapped)) unlink(f_unmapped)
-    })
-    
-    fwrite(bed_df, f_in, sep = "\t", col.names = FALSE, scipen = 50)
-    cmd <- glue("liftOver {f_in} {chain_file} {f_out} {f_unmapped}")
-    system(cmd, ignore.stdout = TRUE, ignore.stderr = TRUE)
-    
-    if (file.size(f_out) == 0) return(NULL)
-    
-    res_df <- fread(f_out, header = FALSE, col.names = c("chr", "start", "end", "id"))
-    
-    return(list(
-        chrom = gsub("^chr", "", res_df$chr[1]),
-        pos = res_df$end[1]
-    ))
 }
 
 .recomb_cache <- new.env(parent = emptyenv())

@@ -127,7 +127,10 @@ significance_label <- if(!is.null(cfg_global$plot_settings$significance_label)) 
         # Convert "5e-08" to "5×10⁻⁸"
         exp_val <- gsub("e-0?", "×10⁻", exp_val)
         exp_val <- gsub("^-", "⁻", exp_val)
-    paste0("GWAS ", exp_val)
+        paste0("GWAS ", exp_val)
+    } else {
+        # For larger thresholds, use simple format
+        paste0("GWAS ", thresh)
     }
 }
 

@@ -57,16 +57,8 @@ load_chromosome_hash <- function(chrom) {
         assign(chrom, hash_data, envir = .hash_cache)
     }
 
-    return(hash_data)
+return(hash_data)
 }
-
-convert_rsid_to_pos <- function(rsids, chromosomes) {
-    result <- character(length(rsids))
-    result[] <- NA_character_ # Default to NA
-
-    if (is.null(.hash_cache$file_map)) {
-        return(result)
-    }
     unique_chroms <- unique(chromosomes[!is.na(chromosomes)])
 
     for (chrom in unique_chroms) {

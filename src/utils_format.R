@@ -280,8 +280,8 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         }
         setnames(gwas_df, "rsID", "rsid")
     }
-    if ("variant_id" %in% names(qtl_df) && !"variant_id" %in% names(qtl_df)) {
-        # Already lowercase
+    if ("variant_id" %in% names(qtl_df)) {
+        # variant_id column already exists (lowercase)
     }
     # Check for rsID columns
     gwas_has_rsid <- any(tolower(names(gwas_df)) %in% c("snpid", "snp", "rsid"))
@@ -596,10 +596,6 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
         colnames(ld_mat) <- bim$SNP; rownames(ld_mat) <- bim$SNP
         return(list(R = ld_mat, snp_info = bim))
     }, error = function(e) return(NULL))
-}
-
-write_coloc_result <- function(res_dt, output_file) {
-  fwrite(res_dt, output_file, sep = "\t", quote = FALSE)
 }
 
 # ------------------------------------------------------------------------------
