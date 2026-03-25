@@ -80,35 +80,3 @@ return(hash_data)
 
     return(result)
 }
-
-clear_hash_cache <- function(keep_chroms = NULL) {
-    if (is.null(.hash_cache$file_map)) return(invisible(NULL))
-
-    all_chroms <- setdiff(ls(.hash_cache), "file_map")
-
-    if (is.null(keep_chroms)) {
-        to_remove <- all_chroms
-    } else {
-        to_remove <- setdiff(all_chroms, as.character(keep_chroms))
-    }
-
-    if (length(to_remove) > 0) {
-        message(glue("[HASH] Clearing cache for: {paste(to_remove, collapse=', ')}"))
-        rm(list = to_remove, envir = .hash_cache)
-        gc(verbose = FALSE)
-    }
-
-    invisible(NULL)
-}
-
-get_hash_stats <- function() {
-    if (is.null(.hash_cache$file_map)) {
-        return(list(initialized = FALSE))
-    }
-    loaded_chroms <- setdiff(ls(.hash_cache), "file_map")
-    list(
-        initialized = TRUE,
-        available_chroms = names(.hash_cache$file_map),
-        loaded_chroms = loaded_chroms
-    )
-}

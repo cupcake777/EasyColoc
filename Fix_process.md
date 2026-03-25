@@ -191,7 +191,8 @@ with open('config/gwas.yaml') as f:
 | 未使用函数 | `src/utils_plot.R` | `plot_gwas_association` | ✅ |
 | 未使用库 | `src/utils_plot.R` | `vroom`, `forcats`, `purrr`, `tidyr` | ✅ |
 | 未使用配置 | `config/global.yaml` | `verbose`, `work_dir`, `keep_intermediates`, `keep_on_error`, `log_file` | ✅ |
-| 过时工具 | `tools/` | `dbsnp_hash_table_maker.py`, `hash2rds.r` | ✅ |
+
+> **Note**: `tools/` 目录下的脚本保留用于参考数据格式化，未删除
 
 ---
 
@@ -269,30 +270,17 @@ plot_gwas_association <- function(...) { ... }
 
 ---
 
-### 删除的过时工具
-
-| 文件 | 替代方案 |
-|------|----------|
-| `tools/dbsnp_hash_table_maker.py` | `tools/bed2rds.r` |
-| `tools/hash2rds.r` | `tools/bed2rds.r` |
-
-**原因**: 这两个工具是旧的两步转换流程 (BED → JSON → RDS)，已被 `bed2rds.r` 的直接转换流程 (BED → RDS) 取代。
-
----
-
 ### 代码量变化
 
 | 文件 | 删除行数 |
 |------|----------|
 | `src/utils_analysis.R` | ~17 行 |
-| `src/utils_hash.R` | ~30 行 |
+| `src/utils_hash.R` | ~32 行 |
 | `src/utils_helpers.R` | ~60 行 |
 | `src/utils_format.R` | ~5 行 |
-| `src/utils_plot.R` | ~80 行 |
+| `src/utils_plot.R` | ~77 行 |
 | `config/global.yaml` | ~5 行 |
-| `tools/dbsnp_hash_table_maker.py` | 整个文件 (~44 行) |
-| `tools/hash2rds.r` | 整个文件 (~52 行) |
-| **总计** | **~293 行** |
+| **总计** | **~196 行** |
 
 ---
 
@@ -301,7 +289,7 @@ plot_gwas_association <- function(...) { ... }
 - [x] 删除未使用函数 (8个)
 - [x] 删除未使用库导入 (4个)
 - [x] 删除未使用配置项 (5个)
-- [x] 删除过时工具文件 (2个)
+- [x] 保留 `tools/` 目录（用于参考数据格式化）
 - [x] 更新修复文档
 
 **冗余清理完成时间**: 2026-03-25
