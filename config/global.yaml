@@ -1,5 +1,5 @@
 output_dir: "./results"
-temp_dir: "./temp"              # 临时目录：PLINK中间结果、报错信息等
+temp_dir: "./temp"
 log_file: "./results/run_coloc.log"
 sig_threshold: 0.8
 use_parallel: true
@@ -44,10 +44,10 @@ harmonization_settings:
 plot_settings:
   significance_threshold: 5.0e-8
   plot_window_bp: 200000
-  plot_width: 10           # inches
-  plot_height: 10          # inches (increased for dotplot + genetrack)
-  point_size: 5             # dot size (increased)
-  point_alpha: 0.85          # dot transparency
+  plot_width: 10 # inches
+  plot_height: 10 # inches (increased for dotplot + genetrack)
+  point_size: 5 # dot size (increased)
+  point_alpha: 0.85 # dot transparency
   # Title format: which field from QTL phenotype to show
   # Options: gene (default), transcript, region, or any field from QTL phenotype
   # Combined as: QTLtype_PhenotypeField (e.g., stage3_apa_ARL3)

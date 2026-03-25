@@ -4,7 +4,7 @@
 # GWAS summary statistics configuration
 
 datasets:
-# --- SCZ ---
+  # --- SCZ ---
   - id: "EAS_SCZ"
     name: "EAS_SCZ"
     file: "/home/lyc/share_group_folder/GWAS/SCZ_hg19_eas.txt.gz"
@@ -45,7 +45,7 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- AD ---
+  # --- AD ---
   - id: "EAS_AD"
     name: "EAS_AD"
     file: "/home/lyc/share_group_folder/GWAS/AD_hg38_eas.txt.gz"
@@ -84,7 +84,7 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- ALS ---
+  # --- ALS ---
   - id: "EAS_ALS"
     name: "EAS_ALS"
     file: "/home/lyc/share_group_folder/GWAS/ALS_hg19_eas.txt.gz"
@@ -104,7 +104,7 @@ datasets:
       beta: "EFFECT"
       se: "SE"
 
-# --- BD ---
+  # --- BD ---
   - id: "EAS_BIP"
     name: "EAS_BIP"
     file: "/home/lyc/share_group_folder/GWAS/BIP_hg19_eas.txt.gz"
@@ -145,7 +145,7 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- PD ---
+  # --- PD ---
   - id: "EAS_PD"
     name: "EAS_PD"
     file: "/home/lyc/share_group_folder/GWAS/PD_hg19_eas.txt.gz"
@@ -186,7 +186,7 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- Ischemic stroke ---
+  # --- Ischemic stroke ---
   - id: "EAS_AIS"
     name: "EAS_AIS"
     file: "/home/lyc/share_group_folder/GWAS/Ischemic_stroke_hg19_eas.txt.gz"
@@ -206,8 +206,8 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- ADHD ---
-  - id: "ADHD"
+  # --- ADHD ---
+  - id: "EUR_ADHD"
     name: "EUR_ADHD"
     file: "/home/lyc/share_group_folder/GWAS/ADHD_hg19_eurmeta.txt.gz"
     build: "hg19"
@@ -227,8 +227,8 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- ASD ---
-  - id: "ASD"
+  # --- ASD ---
+  - id: "EUR_ASD"
     name: "EUR_ASD"
     file: "/home/lyc/share_group_folder/GWAS/ASD_hg19_eur.txt.gz"
     build: "hg19"
@@ -247,8 +247,8 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- ANX ---
-  - id: "ANX"
+  # --- ANX ---
+  - id: "EUR_ANX"
     name: "EUR_ANX"
     file: "/home/lyc/share_group_folder/GWAS/ANX_hg19_eur.txt.gz"
     build: "hg19"
@@ -268,8 +268,8 @@ datasets:
       beta: "Effect"
       se: "StdErr"
 
-# --- INS ---
-  - id: "INS"
+  # --- INS ---
+  - id: "EUR_INS"
     name: "EUR_INS"
     file: "/home/lyc/share_group_folder/GWAS/Insomnia_hg19_eur.txt.gz"
     build: "hg19"
@@ -289,8 +289,8 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- PTSD ---
-  - id: "PTSD"
+  # --- PTSD ---
+  - id: "EUR_PTSD"
     name: "EUR_PTSD"
     file: "/home/lyc/share_group_folder/GWAS/PTSD_h19_eur.txt.gz"
     build: "hg19"
@@ -310,8 +310,8 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- MDD ---
-  - id: "MDD"
+  # --- MDD ---
+  - id: EUR_MDD"
     name: "EUR_MDD"
     file: "/home/lyc/share_group_folder/GWAS/MDD_hg19_eur.txt.gz"
     build: "hg19"
@@ -331,8 +331,8 @@ datasets:
       beta: "BETA"
       se: "SE"
 
-# --- INT ---
-  - id: "Intelligence"
+  # --- INT ---
+  - id: "EUR_INT"
     name: "EUR_INT"
     file: "/home/lyc/share_group_folder/GWAS/Intel_hg19_eur.txt.gz"
     build: "hg19"
