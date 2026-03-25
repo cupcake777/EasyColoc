@@ -1,5 +1,4 @@
 Type,NumberRNASeqandGTSamples,NumberRNASeqSamples,Number_of_sigpheno,allPairsTabixFilename,sigPairsTabixFilename
-stage1_apa,189,222,425,/home/lyc/share_group_folder/work/apa/coloc/stage1_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage1_sig.tab.gz
-stage2_apa,130,182,251,/home/lyc/share_group_folder/work/apa/coloc/stage2_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage2_sig.tab.gz
-stage3_apa,378,412,1231,/home/lyc/share_group_folder/work/apa/coloc/stage3_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage3_sig.tab.gz
-stage4_apa,697,816,196,/home/lyc/share_group_folder/work/apa/coloc/stage4_all.tab.gz,/home/lyc/share_group_folder/work/apa/coloc/stage4_sig.tab.gz
+prenatal,189,204,407,/home/lyc/share_group_folder/work/apa/04_coloc/prenatal.all_pairs.txt.gz,/home/lyc/share_group_folder/work/apa/04_coloc/prenatal.signif_pairs.txt.gz
+postnatal,509,531,1459,/home/lyc/share_group_folder/work/apa/04_coloc/postnatal.all_pairs.txt.gz,/home/lyc/share_group_folder/work/apa/04_coloc/postnatal.signif_pairs.txt.gz
+interaction,698,751,235,/home/lyc/share_group_folder/work/apa/04_coloc/interaction.all_pairs.txt.gz,/home/lyc/share_group_folder/work/apa/04_coloc/interaction.signif_pairs.txt.gz
