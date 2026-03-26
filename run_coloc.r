@@ -22,6 +22,20 @@ cfg_global <- read_yaml("config/global.yaml")
 cfg_gwas   <- read_yaml("config/gwas.yaml")
 cfg_qtl    <- read_yaml("config/qtl.yaml")
 
+# =============================================================================
+# Reproducibility: Set global random seed
+# =============================================================================
+# Seed controls: (1) Global R random number generation
+#                (2) SuSiE-RSS iterative fine-mapping (uses offset seeds)
+#                (3) Parallel mclapply (mc.set.seed = TRUE)
+global_seed <- if(!is.null(cfg_global$random_seed)) {
+    as.integer(cfg_global$random_seed)
+} else {
+    20240326  # Default seed if not specified
+}
+set.seed(global_seed)
+message(glue("[INIT] Global random seed set: {global_seed}"))
+
 # Temp directory for intermediate files (PLINK clump outputs, error logs, etc.)
 temp_dir <- if (!is.null(cfg_global$temp_dir)) cfg_global$temp_dir else "./temp"
 
@@ -148,6 +162,22 @@ title_phenotype_field <- if(!is.null(cfg_global$plot_settings$title_phenotype_fi
     cfg_global$plot_settings$title_phenotype_field
 } else {
     "gene"
+}
+
+# =============================================================================
+# Analysis parameters (centralized for portability)
+# =============================================================================
+# flank_bp: Window size around lead SNP for QTL extraction
+flank_bp <- if(!is.null(cfg_global$analysis$flank_bp)) {
+    as.integer(cfg_global$analysis$flank_bp)
+} else {
+    500000  # Default 500kb window
+}
+# min_snps_susie: Minimum SNPs required to run SuSiE fine-mapping
+min_snps_susie <- if(!is.null(cfg_global$coloc_settings$min_snps_susie)) {
+    as.integer(cfg_global$coloc_settings$min_snps_susie)
+} else {
+    10  # Default minimum for SuSiE
 }
 
 message(glue("[INIT] PP4 Threshold: {coloc_pp4_thresh}"))
@@ -387,9 +417,10 @@ run_pipeline <- function() {
        message(glue("\n>>> Locus: {locus$snp} (hg38 chr{locus$chrom}:{locus$pos})"))
        query_chrom <- locus$chrom
        query_pos <- locus$pos
-       flank_bp <- 500000
+       # Use configurable flank_bp from config/global.yaml (analysis.flank_bp)
        qtl_start <- max(1, query_pos - flank_bp)
        qtl_end   <- query_pos + flank_bp
+       message(glue("[LOCUS] Extraction window: ±{flank_bp/1000}kb ({qtl_start}-{qtl_end})"))
        gwas_locus <- gwas_harm %>%
        filter(CHR == query_chrom & POS >= qtl_start & POS <= qtl_end)
        if(nrow(gwas_locus) == 0) next

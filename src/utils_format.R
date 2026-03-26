@@ -15,13 +15,15 @@ if (file.exists("src/utils_hash.R")) {
 } else {
   warning("Hash conversion script not exist!.")
 }
-add_variant_id <- function(df, chr_col = "CHR", pos_col = "POS", ea_col = "EA", nea_col = "NEA") {
-    req_cols <- c(chr_col, pos_col, ea_col, nea_col)
+add_variant_id <- function(df, chr_col = "CHR", pos_col = "POS", allele1_col = "NEA", allele2_col = "EA") {
+    req_cols <- c(chr_col, pos_col, allele1_col, allele2_col)
     if (!all(req_cols %in% names(df))) {
         stop(glue("Missing columns for ID creation: {paste(setdiff(req_cols, names(df)), collapse=', ')}"))
     }
-    v_id <- paste0("chr", df[[chr_col]], "_", df[[pos_col]], "_", df[[ea_col]], "_", df[[nea_col]])
-    v_id_flip <- paste0("chr", df[[chr_col]], "_", df[[pos_col]], "_", df[[nea_col]], "_", df[[ea_col]])
+    # Remove "chr" prefix if already present to avoid duplication
+    chr_clean <- gsub("^chr", "", df[[chr_col]])
+    v_id <- paste0("chr", chr_clean, ":", df[[pos_col]], ":", df[[allele1_col]], ":", df[[allele2_col]])
+    v_id_flip <- paste0("chr", chr_clean, ":", df[[pos_col]], ":", df[[allele2_col]], ":", df[[allele1_col]])
     if (inherits(df, "data.table")) {
         df[, variant_id := v_id]
         df[, variant_id_flip := v_id_flip]
@@ -253,7 +255,25 @@ except Exception as e:
    }
 }
 
-# format input
+# =============================================================================
+# prep_coloc_input_file: Merge GWAS and QTL summary statistics for colocalization
+# =============================================================================
+# Merges GWAS and QTL summary statistics by rsID (preferred) or position+allele.
+# Handles strand flips, applies P-value floor for numerical stability.
+#
+# Arguments:
+#   gwas_df, qtl_df: Data frames with GWAS/QTL summary statistics
+#   gwas_cols, qtl_cols: Lists mapping standard names to actual column names
+#   use_hash_table: If TRUE, use SNP hash tables for rsID->position conversion
+#   min_snps: Minimum SNPs required for colocalization (default 30)
+#   pvalue_floor: Floor value for P-values to prevent -Inf in -log10(P).
+#                 Default 1e-300 follows GWAS catalog convention.
+#                 Configurable via coloc_settings.pvalue_floor in config/global.yaml.
+#   verbose: If TRUE, print detailed progress messages
+#
+# Returns:
+#   Merged data.table with columns for both GWAS and QTL (suffixes .gwas/.qtl)
+# =============================================================================
 prep_coloc_input_file <- function(gwas_df, qtl_df,
                                   gwas_cols = list(pval="P", beta="BETA", se="SE", n="N"),
                                   qtl_cols = list(pval="pval_nominal", beta="slope", se="slope_se"),
@@ -410,13 +430,25 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         }
     if ((is.null(merged_dt) || nrow(merged_dt) < min_snps) && gwas_has_pos && qtl_has_pos) {
         msg("[MERGE] Attempting Strategy 3: position + allele matching...")
+        # Use renamed columns if they exist, otherwise use original names
+        gwas_chr_col <- if ("CHR.gwas" %in% names(gwas_df)) "CHR.gwas" else "CHR"
+        gwas_pos_col <- if ("POS.gwas" %in% names(gwas_df)) "POS.gwas" else "POS"
+        gwas_ea_col <- if ("EA.gwas" %in% names(gwas_df)) "EA.gwas" else "EA"
+        gwas_nea_col <- if ("NEA.gwas" %in% names(gwas_df)) "NEA.gwas" else "NEA"
+        
+        qtl_chr_col <- if ("CHR.qtl" %in% names(qtl_df)) "CHR.qtl" else "CHR"
+        qtl_pos_col <- if ("POS.qtl" %in% names(qtl_df)) "POS.qtl" else "POS"
+        qtl_ea_col <- if ("EA.qtl" %in% names(qtl_df)) "EA.qtl" else "EA"
+        qtl_nea_col <- if ("NEA.qtl" %in% names(qtl_df)) "NEA.qtl" else "NEA"
+        
         if (gwas_has_allele) {
-            gwas_df <- add_variant_id(gwas_df, "CHR", "POS", "EA", "NEA")
+            # GWAS SNPID format is chr:pos:NEA:EA, so we use NEA:EA order
+            gwas_df <- add_variant_id(gwas_df, gwas_chr_col, gwas_pos_col, gwas_nea_col, gwas_ea_col)
         }
-        qtl_ref <- if("REF" %in% names(qtl_df)) "REF" else "EA"
-        qtl_alt <- if("ALT" %in% names(qtl_df)) "ALT" else "NEA"
-        if (qtl_ref %in% names(qtl_df) && qtl_alt %in% names(qtl_df)) {
-             qtl_df <- add_variant_id(qtl_df, "CHR", "POS", qtl_ref, qtl_alt)
+        # QTL variant_id format is chr:pos:ref:alt = chr:pos:NEA:EA
+        # Since QTL's NEA=REF and EA=ALT, we use NEA:EA = REF:ALT
+        if (all(c(qtl_nea_col, qtl_ea_col) %in% names(qtl_df))) {
+             qtl_df <- add_variant_id(qtl_df, qtl_chr_col, qtl_pos_col, qtl_nea_col, qtl_ea_col)
         }
         if ("variant_id" %in% names(gwas_df) && "variant_id" %in% names(qtl_df)) {
             # Forward Match
@@ -504,8 +536,14 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
     # =============================================================================
     # Final Summary
     # =============================================================================
-    msg(glue("[MERGE] Final dataset: {nrow(merged_dt)} SNPs ready for colocalization"))
-
+    # P-value Floor Application: Numerical Stability
+    # =============================================================================
+    # Rationale: P-values <= 0 or NA cause -Inf in -log10(P) transformations
+    # used in visualization. The floor value 1e-300 follows GWAS catalog
+    # convention and stays safely above R's .Machine$double.xmin (~2.2e-308).
+    # This prevents numerical instability without introducing meaningful bias
+    # since such extreme P-values are effectively zero for practical interpretation.
+    # Configurable via coloc_settings.pvalue_floor in config/global.yaml.
     p_gwas <- paste0(gwas_cols$pval, ".gwas")
     p_qtl  <- paste0(qtl_cols$pval, ".qtl")
 

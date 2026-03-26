@@ -15,6 +15,7 @@ suppressPackageStartupMessages({
   library(GenomicFeatures)
   library(AnnotationDbi)
   library(grid)
+  library(viridis)  # Perceptually uniform, colorblind-friendly color scales
 })
 
 resolve_col <- function(df, preferred, alternatives = NULL) {
@@ -268,12 +269,19 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
        cs_snps <- as.character(credible_set$snp)
        cs_pp <- credible_set$SNP.PP.H4
    }
-   plot_df$is_credible <- plot_df$rsid %in% cs_snps & !plot_df$is_lead
 
-   plot_df$color_code <- cut(
+  # ==========================================================================
+  # LD Color Scale: Viridis (perceptually uniform, colorblind-friendly)
+  # ==========================================================================
+  # Replaces previous RdYlBu scheme which had poor yellow distinguishability
+  # and red-green confusion issues for colorblind users (~8% of males).
+  # viridis(n=5, option="D") produces: dark purple -> blue -> green -> yellow
+  # Option "magma" (sequential) or "cividis" (optimized for colorblind) available.
+  vir_colors <- viridis(5, option = "D")
+  plot_df$color_code <- cut(
     plot_df$r2,
     breaks = c(-0.01, 0.2, 0.4, 0.6, 0.8, 1.0),
-    labels = c("#313695", "#4575B4", "#74ADD1", "#FDB863", "#D73027"),
+    labels = vir_colors,
     include.lowest = TRUE
   )
   plot_df$color_code <- as.character(plot_df$color_code)
@@ -773,7 +781,8 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
                                  significance_label = NULL,
                                  title_phenotype_field = "gene",
                                  plot_width = 10, plot_height = 8,
-                                 credible_set = NULL) {
+                                 credible_set = NULL,
+                                 plot_window_bp = 200000) {
 
     message("[plot_qtl_association] Starting...")
 
@@ -801,8 +810,9 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
           lead_row <- leadSNP_DF[leadSNP_DF[[snp_col]] == lead_snp_val, ]
           if (nrow(lead_row) > 0) {
               center_pos <- safe_numeric(lead_row[[pos_col]][1])
-              min_pos <- center_pos - 200000
-              max_pos <- center_pos + 200000
+              # Use configurable plot_window_bp (default 200kb, from config/global.yaml)
+              min_pos <- center_pos - plot_window_bp
+              max_pos <- center_pos + plot_window_bp
           } else {
               min_pos <- min(positions)
               max_pos <- max(positions)

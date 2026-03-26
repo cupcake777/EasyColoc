@@ -8,16 +8,40 @@ suppressPackageStartupMessages({
   library(susieR)
 })
 
-get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, maf_default = 0.1, maf_na_replacement = 0.05, maf_epsilon = 1e-6, keep_file = NULL) { 
+get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, maf_default = 0.1, maf_na_replacement = 0.05, maf_epsilon = 1e-6, keep_file = NULL) {
+    # ==========================================================================
+    # get_clean_maf: Extract or impute minor allele frequencies
+    # ==========================================================================
+    # Priority: (1) EAF/MAF/af column if present
+    #           (2) Default maf_default (configurable, default 0.1)
+    # Missing values replaced with maf_na_replacement (default 0.05)
+    # Values clamped to [maf_epsilon, 1-maf_epsilon] for numerical stability
     get_clean_maf <- function(df, suffix) {
         candidates <- c(paste0("EAF", suffix), paste0("MAF", suffix), paste0("af", suffix))
         if (suffix == ".gwas") candidates <- c(candidates, "EAF", "MAF", "af")
         raw_freq <- NULL
         for (col in candidates) if (col %in% names(df)) { raw_freq <- df[[col]]; break }
-        if (is.null(raw_freq)) return(rep(maf_default, nrow(df)))
+
+        # Case 1: No frequency column found - use default
+        if (is.null(raw_freq)) {
+            warning(sprintf("[MAF] No allele frequency column found; using default MAF=%.2f for all %d SNPs",
+                           maf_default, nrow(df)))
+            return(rep(maf_default, nrow(df)))
+        }
+
         freq <- as.numeric(raw_freq); maf <- pmin(freq, 1 - freq)
-        if (any(is.na(maf))) maf[is.na(maf)] <- maf_na_replacement
-        maf[maf < maf_epsilon] <- maf_epsilon; maf[maf > (1 - maf_epsilon)] <- 1 - maf_epsilon
+
+        # Case 2: Missing values in frequency column
+        n_na_maf <- sum(is.na(maf))
+        if (n_na_maf > 0) {
+            message(sprintf("[MAF] %d SNPs (%.1f%%) had missing MAF - replaced with %.3f",
+                           n_na_maf, n_na_maf/nrow(df)*100, maf_na_replacement))
+            maf[is.na(maf)] <- maf_na_replacement
+        }
+
+        # Clamp to valid range to prevent numerical issues
+        maf[maf < maf_epsilon] <- maf_epsilon
+        maf[maf > (1 - maf_epsilon)] <- 1 - maf_epsilon
         return(maf)
     }
 
@@ -75,8 +99,25 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
     
     d1_susie <- filter_data(d1, common_snps); d2_susie <- filter_data(d2, common_snps)
     R_susie <- ld_res$R[common_snps, common_snps]
-    
+
+    # ==========================================================================
+    # SuSiE-RSS Fine-Mapping: Set seeds for reproducibility
+    # ==========================================================================
+    # susie_rss() uses iterative variational inference which involves
+    # stochastic initialization. We use offset seeds from the global seed
+    # to ensure: (1) reproducibility across runs, (2) different seeds for
+    # GWAS vs QTL to avoid artificial correlation.
+    # Offsets: +1 for GWAS, +2 for QTL
+    if (exists("global_seed", mode = "numeric")) {
+        set.seed(global_seed + 1)
+        message("[SuSiE] Seed set for GWAS fine-mapping (global_seed + 1)")
+    }
     susie_1 <- try(susie_rss(bhat = d1_susie$beta, shat = sqrt(d1_susie$varbeta), R = R_susie, n = d1_susie$N[1], verbose = FALSE), silent = TRUE)
+
+    if (exists("global_seed", mode = "numeric")) {
+        set.seed(global_seed + 2)
+        message("[SuSiE] Seed set for QTL fine-mapping (global_seed + 2)")
+    }
     susie_2 <- try(susie_rss(bhat = d2_susie$beta, shat = sqrt(d2_susie$varbeta), R = R_susie, n = d2_susie$N[1], verbose = FALSE), silent = TRUE)
     
     if (inherits(susie_1, "try-error") || inherits(susie_2, "try-error")) { 

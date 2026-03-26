@@ -2,10 +2,11 @@ output_dir: "./results"
 temp_dir: "./temp"
 sig_threshold: 0.8  # Legacy fallback for coloc_settings.pp4_threshold
 use_parallel: true
-n_cores: 8
+n_cores: 2
+random_seed: 20240326  # Global seed for reproducibility (SuSiE, parallel processing)
 plink_hg38: "/home/lyc/share_group_folder/ref/1KG/hg38/1kg_hg38_filtered"
 plink_keep: "/home/lyc/share_group_folder/ref/1KG/EAS.sample"
-hash_table_dir: "/home/lyc/share_group_folder/ref/hash_table/"
+hash_table_dir: ""
 recom: "/home/lyc/share_group_folder/ref/recom/hg38/CHB/CHB"
 gene_anno: "/home/lyc/share_group_folder/ref/gencode.v40.annotation.gtf.gz"
 ref_genome_hg19: "/home/lyc/share_group_folder/ref/Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz"
@@ -25,13 +26,20 @@ coloc_settings:
   pp4_threshold: 0.7
   susie_threshold: 0.3
   min_snps: 10
+  min_snps_susie: 10  # Minimum SNPs required to run SuSiE fine-mapping
   top_candidates: 100
   maf_default: 0.1
   maf_na_replacement: 0.05
+  maf_epsilon: 1.0e-6  # Boundary epsilon to prevent MAF=0 or MAF=1
   p1: 1.0e-4
   p2: 1.0e-4
   p12: 1.0e-5
-  pvalue_floor: 1.0e-300
+  pvalue_floor: 1.0e-300  # GWAS catalog convention; prevents -Inf in -log10(P)
+
+# Analysis parameters (centralized for portability)
+analysis:
+  flank_bp: 500000  # Window size around lead SNP for QTL extraction (500kb)
+  plot_window_bp: 200000  # Default plot window if not auto-calculated (200kb)
 
 harmonization_settings:
   env_name: "gwaslab"
@@ -48,6 +56,9 @@ plot_settings:
   # Combined as: QTLtype_PhenotypeField (e.g., stage3_apa_ARL3)
   title_phenotype_field: "gene"
   r2_breaks: [0.2, 0.4, 0.6, 0.8, 1.0]
+  # LD color scale: "viridis" (perceptually uniform, colorblind-friendly),
+  # "magma" (sequential), or "custom" (use r2_colors below)
+  r2_color_scale: "viridis"
   r2_colors:
     - "#000080"
     - "#87CEEB"
@@ -55,3 +66,4 @@ plot_settings:
     - "#FFA500"
     - "#FF0000"
   lead_snp_color: "#7F3C8D"
+  credible_set_color: "#E67E22"
