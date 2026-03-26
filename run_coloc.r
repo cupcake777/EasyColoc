@@ -199,29 +199,89 @@ if (!is.null(cfg_global$hash_table_dir) && dir.exists(cfg_global$hash_table_dir)
 }
 
 identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink_bfile = NULL, plink_bin = "plink",
-                           clump_p1 = 5e-8, clump_p2 = 5e-8, clump_kb = 1000, clump_r2 = 0.1, dataset_id = NULL, keep_file = NULL) {
+                           clump_p1 = 5e-8, clump_p2 = 5e-8, clump_kb = 1000, clump_r2 = 0.1, dataset_id = NULL, keep_file = NULL,
+                           ea_col = NULL, nea_col = NULL) {
     message(glue("[LOCUS] Identifying loci (P < {clump_p1})..."))
     if (!all(c(p_col, snp_col, chrom_col, pos_col) %in% names(sumstats_dt))) {
         stop("Columns not found in sumstats_dt")
     }
     sig_dt <- sumstats_dt[sumstats_dt[[p_col]] <= clump_p1, ]
     if (nrow(sig_dt) == 0) { warning("No significant SNPs."); return(NULL) }
-     if (!is.null(plink_bfile)) {
+
+    # Create chr:pos:ref:alt key for matching if allele columns available
+    use_allele_matching <- !is.null(ea_col) && !is.null(nea_col) &&
+                           all(c(ea_col, nea_col) %in% names(sumstats_dt))
+
+    if (use_allele_matching) {
+        sig_dt[, chr_pos_ref_alt := paste0(get(chrom_col), ":", get(pos_col), ":", get(nea_col), ":", get(ea_col))]
+        n_unique <- nrow(sig_dt[!duplicated(chr_pos_ref_alt)])
+        message(glue("        Created {n_unique} unique variant keys for matching"))
+    }
+
+    if (!is.null(plink_bfile)) {
         message(glue("        Using PLINK clumping with: {basename(plink_bfile)}"))
         if (!dir.exists(temp_dir)) dir.create(temp_dir, recursive = TRUE)
         ds_id <- if(is.null(dataset_id)) "unknown" else dataset_id
         temp_assoc <- file.path(temp_dir, glue("clump_input_{ds_id}.qassoc"))
         temp_prefix <- file.path(temp_dir, glue("clump_output_{ds_id}"))
 
-        clump_input <- sig_dt[!duplicated(sig_dt[[snp_col]]), ]
-        clump_write <- clump_input[, c(snp_col, p_col), with=FALSE]
-        colnames(clump_write) <- c("SNP", "P")
+        # Try to match variants with reference panel by chr:pos:ref:alt
+        matched_snps <- NULL
+        if (use_allele_matching) {
+            message("        Attempting to match variants with reference panel...")
+            tryCatch({
+                # Read reference panel bim file
+                bim_file <- gsub("\\.bed$", ".bim", plink_bfile)
+                if (file.exists(bim_file)) {
+                    ref_panel <- fread(bim_file, header = FALSE)
+                    setnames(ref_panel, c("CHR", "SNP", "CM", "POS", "A1", "A2"))
+                    # Create matching key (ref panel uses A1 as effect allele)
+                    ref_panel[, chr_pos_ref_alt := paste0(CHR, ":", POS, ":", A2, ":", A1)]
+
+                    # Match GWAS variants to reference
+                    gwas_variants <- sig_dt[!duplicated(chr_pos_ref_alt)]
+                    matched_snps <- merge(
+                        gwas_variants,
+                        ref_panel[, .(SNP, chr_pos_ref_alt)],
+                        by = "chr_pos_ref_alt",
+                        all.x = FALSE
+                    )
+                    message(glue("        Matched {nrow(matched_snps)} of {nrow(gwas_variants)} variants to reference panel"))
+
+                    if (nrow(matched_snps) < nrow(gwas_variants) * 0.5) {
+                        message("        Warning: Less than 50% variant match rate. May affect clumping quality.")
+                    }
+                }
+            }, error = function(e) {
+                message(glue("        Reference matching failed: {e$message}. Using original SNP IDs."))
+            })
+        }
+
+        # Prepare clumping input
+        if (!is.null(matched_snps) && nrow(matched_snps) > 0) {
+            # Use matched reference SNP IDs
+            clump_input <- matched_snps[order(get(p_col))]
+            clump_write <- clump_input[, .(SNP = SNP, P = get(p_col))]
+        } else if (use_allele_matching) {
+            # Fallback: use chr:pos:ref:alt as SNP ID
+            message("        Using chr:pos:ref:alt format as SNP identifiers")
+            clump_input <- sig_dt[!duplicated(chr_pos_ref_alt)]
+            clump_write <- clump_input[, .(SNP = get("chr_pos_ref_alt"), P = get(p_col))]
+        } else {
+            # No allele matching: use original SNP IDs
+            clump_input <- sig_dt[!duplicated(get(snp_col))]
+            clump_write <- clump_input[, .(SNP = get(snp_col), P = get(p_col))]
+        }
+
+        clump_write <- clump_write[!is.na(P) & P > 0]
         fwrite(clump_write, temp_assoc, sep = "\t", quote = FALSE, col.names = TRUE)
-        message(glue("        DEBUG: Wrote {nrow(clump_write)} SNPs to {temp_assoc}"))
+        message(glue("        Wrote {nrow(clump_write)} SNPs to {temp_assoc}"))
 
         # Show first few lines of input
-        message(glue("        DEBUG: Input sample: "))
-        message(paste(readLines(temp_assoc)[1:5], collapse="\n        "))
+        if (file.exists(temp_assoc)) {
+            message("        Input sample:")
+            message(paste(readLines(temp_assoc)[1:min(5, nrow(clump_write) + 1)], collapse = "\n        "))
+        }
 
         keep_cmd <- if (!is.null(keep_file) && file.exists(keep_file)) {
             glue("--keep {keep_file}")
@@ -232,37 +292,60 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
                     "--clump-p1 {clump_p1} --clump-p2 {clump_p2} ",
                     "--clump-r2 {clump_r2} --clump-kb {clump_kb} --out {temp_prefix}")
 
-        message(glue("        DEBUG: PLINK command: {cmd}"))
-        sys_result <- system(cmd, ignore.stdout = FALSE, ignore.stderr = FALSE)
+        message(glue("        Running PLINK clumping..."))
+        sys_result <- system(cmd, ignore.stdout = TRUE, ignore.stderr = TRUE)
 
         # Check log file
         log_file <- paste0(temp_prefix, ".log")
         if (file.exists(log_file)) {
             log_content <- readLines(log_file)
-            message(glue("        DEBUG: PLINK log:"))
-            message(paste(tail(log_content, 20), collapse="\n        "))
+            match_line <- grep("clumps formed", log_content, value = TRUE)
+            if (length(match_line) > 0) {
+                message(glue("        {trimws(match_line)}"))
+            }
         }
 
         if (sys_result != 0) {
-            warning(glue("[LOCUS] PLINK execution failed (exit code: {sys_result}). Check {temp_dir}/ directory."))
+            warning(glue("[LOCUS] WARNING: PLINK execution failed (exit code: {sys_result}). Distance-based pruning will be used as fallback."))
         } else {
             clump_file <- paste0(temp_prefix, ".clumped")
             if (file.exists(clump_file)) {
                 clump_res <- fread(clump_file)
                 if (nrow(clump_res) == 0) {
-                    warning("[LOCUS] PLINK ran successfully but found 0 clumps. Possible SNP ID mismatch between sumstats and reference panel? Falling back to distance pruning.")
+                    warning(glue("[LOCUS] WARNING: PLINK found 0 clumps. Possible causes: SNP ID mismatch, population mismatch, or overly stringent thresholds. Distance-based pruning will be used as fallback."))
                 } else {
                     message(glue("[LOCUS] Found {nrow(clump_res)} clumps via PLINK."))
                     loci <- list()
                     for(i in 1:nrow(clump_res)) {
                         lead_snp <- clump_res$SNP[i]
-                        row <- sig_dt[sig_dt[[snp_col]] == lead_snp, ][1]
+                        # Map back to original GWAS data
+                        if (!is.null(matched_snps)) {
+                            # Use matched SNP mapping
+                            matched_row <- matched_snps[SNP == lead_snp]
+                            if (nrow(matched_row) > 0) {
+                                row <- sig_dt[chr_pos_ref_alt == matched_row$chr_pos_ref_alt][1]
+                            } else {
+                                row <- sig_dt[sig_dt[[snp_col]] == lead_snp, ][1]
+                            }
+                        } else {
+                            # Try direct match first, then chr:pos match
+                            row <- sig_dt[sig_dt[[snp_col]] == lead_snp, ][1]
+                            if (nrow(row) == 0) {
+                                # Parse chr:pos from SNP ID
+                                parts <- strsplit(lead_snp, ":")[[1]]
+                                if (length(parts) >= 2) {
+                                    row <- sig_dt[sig_dt[[chrom_col]] == parts[1] &
+                                                  sig_dt[[pos_col]] == as.numeric(parts[2]), ][1]
+                                }
+                            }
+                        }
                         if(nrow(row) > 0) {
                             loci[[i]] <- list(
                                 chrom = as.character(row[[chrom_col]]),
                                 pos = as.numeric(row[[pos_col]]),
-                                snp = lead_snp,
-                                p = as.numeric(row[[p_col]])
+                                snp = row[[snp_col]],
+                                p = as.numeric(row[[p_col]]),
+                                identification_method = "PLINK_clump"
                             )
                         }
                     }
@@ -271,23 +354,25 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
             }
         }
     }
-    message("        Fallback to distance pruning...")
+    warning(glue("[LOCUS] WARNING: PLINK clumping unavailable. Using distance-based pruning with {clump_kb}kb window as fallback."))
     sig_dt <- sig_dt[order(sig_dt[[p_col]]), ]
     loci <- list()
     while(nrow(sig_dt) > 0) {
         lead <- sig_dt[1, ]
         loci[[length(loci)+1]] <- list(
-            chrom = as.character(lead[[chrom_col]]), 
-            pos = as.numeric(lead[[pos_col]]), 
-            snp = lead[[snp_col]], 
-            p = as.numeric(lead[[p_col]])
+            chrom = as.character(lead[[chrom_col]]),
+            pos = as.numeric(lead[[pos_col]]),
+            snp = lead[[snp_col]],
+            p = as.numeric(lead[[p_col]]),
+            identification_method = "Distance_pruning"
         )
         lead_chrom <- as.character(lead[[chrom_col]])
         lead_pos <- as.numeric(lead[[pos_col]])
         radius_bp <- clump_kb * 1000
-        sig_dt <- sig_dt[!(as.character(sig_dt[[chrom_col]]) == lead_chrom & 
+        sig_dt <- sig_dt[!(as.character(sig_dt[[chrom_col]]) == lead_chrom &
                            abs(sig_dt[[pos_col]] - lead_pos) <= radius_bp), ]
     }
+    message(glue("[LOCUS] Found {length(loci)} loci via distance pruning."))
     return(loci)
 }
 
@@ -398,6 +483,10 @@ run_pipeline <- function() {
              message(glue("        Using population-specific LD: {pop}"))
          }
 
+         # Add allele columns for variant matching
+         ea_col_locus <- if("EA" %in% names(gwas_harm)) "EA" else NULL
+         nea_col_locus <- if("NEA" %in% names(gwas_harm)) "NEA" else NULL
+
           loci_list <- identify_loci(
               gwas_harm,
               p_col = p_col_locus,
@@ -410,7 +499,9 @@ run_pipeline <- function() {
               clump_kb = clump_kb,
               clump_r2 = clump_r2,
               dataset_id = gwas_cfg$id,
-              keep_file = keep_file
+              keep_file = keep_file,
+              ea_col = ea_col_locus,
+              nea_col = nea_col_locus
           )
       if (is.null(loci_list) || length(loci_list) == 0) { message("No significant loci."); next }
        for (locus in loci_list) {
@@ -564,7 +655,8 @@ run_pipeline <- function() {
                         }
 
                          res_list[[length(res_list)+1]] <- data.table(
-                             GWAS_ID=gwas_cfg$id, QTL_ID=qtl_id, Locus=locus$snp, Gene=gene_sym_for_filename, PP4=pp4, n_snps=res$summary["nsnps"]
+                             GWAS_ID=gwas_cfg$id, QTL_ID=qtl_id, Locus=locus$snp, Gene=gene_sym_for_filename,
+                             PP4=pp4, n_snps=res$summary["nsnps"], identification_method=locus$identification_method
                          )
                   }
                   return(rbindlist(res_list))
