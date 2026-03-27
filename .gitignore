@@ -6,7 +6,7 @@
 # Temporary/cache directories
 temp/
 harmony/
-result/
+results/
 
 # PLINK intermediate files
 *.log
