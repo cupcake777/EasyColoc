@@ -4,9 +4,9 @@
 .Rproj.user/
 
 # Temporary/cache directories
-temp/*
-harmony/*
-result/*
+temp/
+harmony/
+result/
 
 # PLINK intermediate files
 *.log

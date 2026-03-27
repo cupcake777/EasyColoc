@@ -1,0 +1,21 @@
+=============================================================
+EasyColoc Analysis Summary
+=============================================================
+Analysis completed: 2026-03-27 11:11:37.289158
+Summary Statistics:
+-------------------------------------------------------------
+                      Metric        Value
+                 total_tests 2.757000e+03
+ significant_colocalizations 1.100000e+01
+          unique_gwas_traits 1.600000e+01
+         unique_qtl_datasets 3.000000e+00
+                 unique_loci 9.120000e+02
+           unique_phenotypes 0.000000e+00
+                    mean_pp4 7.163304e-02
+                  median_pp4 6.332067e-02
+                     max_pp4 9.695739e-01
+                 mean_n_snps 1.370925e+03
+
+
+Top 10 APA Event-Locus Pairs by PP4:
+-------------------------------------------------------------

@@ -15,6 +15,89 @@ if (file.exists("src/utils_hash.R")) {
 } else {
   warning("Hash conversion script not exist!.")
 }
+
+# =============================================================================
+# APA Gene ID Parser: Handle alternative polyadenylation (APA) transcript format
+# =============================================================================
+# Parses gene IDs in format: "ENST001|GENE1|..." (GTEx APA format)
+# or standard ENSEMBL IDs: "ENSG00000123456.7"
+# Returns list with geneSymbol, is_apa flag, and optional transcript_id
+# =============================================================================
+parse_geneID <- function(geneID, org_db = "org.Hs.eg.db") {
+    geneID <- as.character(geneID)
+
+    if (is.na(geneID) || geneID == "") {
+        return(list(
+            geneSymbol = NA_character_,
+            original_id = geneID,
+            is_apa = FALSE,
+            is_ensembl = FALSE,
+            transcript_id = NULL,
+            ensembl_id = NULL
+        ))
+    }
+
+    result <- list(
+        geneSymbol = geneID,
+        original_id = geneID,
+        is_apa = FALSE,
+        is_ensembl = FALSE,
+        transcript_id = NULL,
+        ensembl_id = NULL
+    )
+
+    if (grepl("\\|", geneID)) {
+        parts <- strsplit(geneID, "\\|")[[1]]
+        if (length(parts) >= 2) {
+            result$is_apa <- TRUE
+            result$geneSymbol <- parts[2]
+            result$transcript_id <- parts[1]
+            message(sprintf("[parse_geneID] APA format detected: %s -> %s", geneID, result$geneSymbol))
+            return(result)
+        }
+    }
+
+    if (grepl("^ENSG[0-9]{11}", geneID)) {
+        result$is_ensembl <- TRUE
+        geneID_noDOT <- gsub("\\..*$", "", geneID)
+        result$ensembl_id <- geneID_noDOT
+
+        tryCatch({
+            symbol <- AnnotationDbi::mapIds(
+                get(org_db, envir = asNamespace(org_db)),
+                keys = geneID_noDOT,
+                column = "SYMBOL",
+                keytype = "ENTREZID",
+                multiVals = "first"
+            )
+            if (!is.na(symbol)) {
+                result$geneSymbol <- symbol
+            }
+        }, error = function(e) {
+            tryCatch({
+                symbol <- AnnotationDbi::mapIds(
+                    get(org_db, envir = asNamespace(org_db)),
+                    keys = geneID_noDOT,
+                    column = "SYMBOL",
+                    keytype = "ENSEMBL",
+                    multiVals = "first"
+                )
+                if (!is.na(symbol)) {
+                    result$geneSymbol <- symbol
+                }
+            }, error = function(e2) {
+                message(sprintf("[parse_geneID] ENSEMBL ID could not be converted: %s", geneID_noDOT))
+            })
+        })
+    }
+
+    if (result$is_ensembl && result$geneSymbol == geneID) {
+        message(sprintf("[parse_geneID] Using ENSEMBL ID as symbol: %s", result$geneSymbol))
+    }
+
+    return(result)
+}
+
 add_variant_id <- function(df, chr_col = "CHR", pos_col = "POS", allele1_col = "NEA", allele2_col = "EA") {
     req_cols <- c(chr_col, pos_col, allele1_col, allele2_col)
     if (!all(req_cols %in% names(df))) {
@@ -81,7 +164,8 @@ run_gwaslab_harmonization <- function(sumstats_dt,
                                       save_dir = NULL,
                                       dataset_id = NULL,
                                       input_file = NULL,
-                                      verbose = TRUE) {
+                                      verbose = TRUE,
+                                      liftover_chain = NULL) {  # Added liftover_chain parameter
 
   log_message <- function(..., verbose = TRUE) {
     if (isTRUE(verbose)) {
@@ -251,8 +335,192 @@ except Exception as e:
          stop("GWASLab output file missing.")
        }
    } else {
-     stop("GWASLab processing failed! Check logs above.")
+     # GWASLab failed - try fallback liftOver strategy
+     log_message("[FALLBACK] GWASLab failed, attempting liftOver fallback...", verbose = verbose)
+
+     if (!is.null(liftover_chain) && file.exists(liftover_chain)) {
+         # Extract chromosome and region from sumstats
+         chr_col <- intersect(c("CHR", "chr", "CHROM"), names(sumstats_dt))[1]
+         pos_col <- intersect(c("POS", "pos", "BP", "POSITION"), names(sumstats_dt))[1]
+
+         if (!is.null(chr_col) && !is.null(pos_col)) {
+             chr_val <- as.character(sumstats_dt[[chr_col]][1])
+             chr_clean <- gsub("^chr", "", chr_val)
+             positions <- sumstats_dt[[pos_col]]
+             positions <- positions[!is.na(positions) & positions > 0]
+
+             if (length(positions) > 0) {
+                 region_start <- min(positions)
+                 region_end <- max(positions)
+
+                 log_message(glue("[FALLBACK] Running liftOver on {chr_clean}:{region_start}-{region_end}"), verbose = verbose)
+
+                 liftover_res <- run_liftover_fallback(
+                     sumstats_dt = sumstats_dt,
+                     chrom = chr_clean,
+                     start_pos = region_start,
+                     end_pos = region_end,
+                     liftOver_chain = liftover_chain
+                 )
+
+                 if (liftover_res$success) {
+                     log_message(glue("[FALLBACK] LiftOver successful: {liftover_res$start}-{liftover_res$end}"), verbose = verbose)
+                     # Return original data with updated coordinates if needed
+                     return(sumstats_dt)
+                 } else {
+                     log_message("[FALLBACK] LiftOver also failed", verbose = verbose)
+                 }
+             }
+         }
+     } else {
+         log_message(glue("[FALLBACK] liftOver chain file not found: {liftover_chain}"), verbose = verbose)
+     }
+
+     stop("GWASLab processing failed and fallback unsuccessful. Check logs above.")
    }
+}
+
+# =============================================================================
+# run_liftover_fallback: Iterative region contraction LiftOver fallback
+# =============================================================================
+# When gwaslab harmonization fails, use liftOver with iterative region
+# contraction strategy (from ColocQuiaL). Gradually shrinks the region
+# until successful mapping or region becomes too small.
+#
+# Arguments:
+#   sumstats_dt: Input summary statistics data.table
+#   chrom: Chromosome number
+#   start_pos, end_pos: Region boundaries (will be modified in place)
+#   liftOver_chain: Path to UCSC liftOver chain file
+#   max_iterations: Maximum contraction iterations (default 20)
+#   contraction_step: Base pairs to contract per iteration (default 5000)
+#
+# Returns:
+#   list(success=BOOLEAN, positions=DATAFRAME, start=INT, end=INT)
+# =============================================================================
+run_liftover_fallback <- function(sumstats_dt,
+                                   chrom,
+                                   start_pos,
+                                   end_pos,
+                                   liftOver_chain,
+                                   max_iterations = 20,
+                                   contraction_step = 5000) {
+
+    message(glue("[LiftOver Fallback] Starting iterative contraction: {start_pos}-{end_pos}"))
+
+    collocStart <- as.integer(start_pos)
+    collocStop <- as.integer(end_pos)
+
+    hg38_positions <- NULL
+    success <- FALSE
+
+    for (iteration in 1:max_iterations) {
+        message(glue("[LiftOver] Attempt {iteration}/{max_iterations}: {collocStart}-{collocStop}"))
+
+        # Create BED file for liftOver
+        bed_liftover <- data.frame(
+            chrom = paste0("chr", chrom),
+            start = c(collocStart - 1, collocStop - 1),
+            end = c(collocStart, collocStop)
+        )
+
+        bed_file <- tempfile(pattern = "liftover_", fileext = ".bed")
+        out_file <- paste0(bed_file, ".lifted")
+        unmapped_file <- paste0(bed_file, ".unmapped")
+
+        fwrite(bed_liftover, bed_file, sep = "\t",
+               col.names = FALSE, quote = FALSE)
+
+        # Run liftOver
+        cmd <- paste("liftOver", bed_file, liftOver_chain, out_file, unmapped_file, "-bedPlus=3")
+        exit_code <- system(cmd, ignore.stdout = TRUE, ignore.stderr = TRUE)
+
+        if (exit_code == 0 && file.exists(out_file)) {
+            hg38_positions <- tryCatch({
+                fread(out_file, header = FALSE)
+            }, error = function(e) NULL)
+        }
+
+        # Check if mapping was successful (both boundaries mapped)
+        if (!is.null(hg38_positions) && nrow(hg38_positions) >= 2) {
+            if (!is.na(hg38_positions[2, 3])) {
+                success <- TRUE
+                message(glue("[LiftOver Fallback] SUCCESS at iteration {iteration}: {hg38_positions[1,3]}-{hg38_positions[2,3]}"))
+
+                # Cleanup temp files
+                file.remove(bed_file, out_file, unmapped_file)
+                break
+            }
+        }
+
+        # Contraction strategy: shrink region from both ends
+        if (!is.null(hg38_positions) && nrow(hg38_positions) >= 1) {
+            # Check which boundary failed
+            if (is.na(hg38_positions[1, 3])) {
+                message(glue("[LiftOver] Start position {collocStart} unmapped - contracting start"))
+                collocStart <- collocStart + contraction_step
+            }
+            if (nrow(hg38_positions) >= 2 && is.na(hg38_positions[2, 3])) {
+                message(glue("[LiftOver] End position {collocStop} unmapped - contracting end"))
+                collocStop <- collocStop - contraction_step
+            }
+        } else {
+            # Both failed - contract from both ends
+            message(glue("[LiftOver] Both boundaries unmapped - contracting both ends by {contraction_step}bp"))
+            collocStart <- collocStart + contraction_step
+            collocStop <- collocStop - contraction_step
+        }
+
+        # Check if region is too small
+        if (collocStart >= collocStop) {
+            message("[LiftOver Fallback] Region collapsed - lifting failed")
+            break
+        }
+
+        if (collocStop - collocStart < 10000) {
+            message("[LiftOver Fallback] Region too small (< 10kb) - giving up")
+            break
+        }
+    }
+
+    if (!success) {
+        message("[LiftOver Fallback] All iterations failed")
+        return(list(
+            success = FALSE,
+            positions = NULL,
+            start = as.integer(start_pos),
+            end = as.integer(end_pos)
+        ))
+    }
+
+    return(list(
+        success = TRUE,
+        positions = hg38_positions,
+        start = hg38_positions[1, 3],
+        end = hg38_positions[2, 3]
+    ))
+}
+
+# =============================================================================
+# apply_parse_geneID: Batch parse gene IDs and format for analysis
+# =============================================================================
+# Applies parse_geneID to a vector of gene IDs and returns formatted data.frame
+# Useful for processing QTL phenotype IDs in batch
+# =============================================================================
+apply_parse_geneID <- function(gene_ids, org_db = "org.Hs.eg.db") {
+    results <- lapply(gene_ids, function(gid) {
+        parse_geneID(gid, org_db = org_db)
+    })
+
+    data.frame(
+        original_id = gene_ids,
+        geneSymbol = sapply(results, function(r) r$geneSymbol),
+        is_apa = sapply(results, function(r) r$is_apa),
+        is_ensembl = sapply(results, function(r) r$is_ensembl),
+        transcript_id = sapply(results, function(r) r$transcript_id),
+        ensembl_id = sapply(results, function(r) r$ensembl_id),
+        stringsAsFactors = FALSE
+    )
 }
 
 # =============================================================================
@@ -726,7 +994,7 @@ merge_all_results <- function(output_dir,
             unique_gwas_traits = length(unique(all_results$GWAS_ID)),
             unique_qtl_datasets = length(unique(all_results$QTL_ID)),
             unique_loci = length(unique(all_results$Locus)),
-            unique_genes = length(unique(all_results$Gene)),
+            unique_phenotypes = length(unique(all_results$Phenotype)),
             mean_pp4 = mean(all_results$PP4, na.rm = TRUE),
             median_pp4 = median(all_results$PP4, na.rm = TRUE),
             max_pp4 = max(all_results$PP4, na.rm = TRUE),
@@ -754,10 +1022,10 @@ merge_all_results <- function(output_dir,
         
         # Top genes by PP4
         if (nrow(sig_results) > 0) {
-            cat("\nTop 10 Gene-Locus Pairs by PP4:\n")
+            cat("\nTop 10 APA Event-Locus Pairs by PP4:\n")
             cat("-------------------------------------------------------------\n")
-            top_genes <- head(sig_results[, .(GWAS_ID, QTL_ID, Locus, Gene, PP4, n_snps)], 10)
-            print(top_genes, row.names = FALSE)
+            top_events <- head(sig_results[, .(GWAS_ID, QTL_ID, Locus, Phenotype, PP4, n_snps)], 10)
+            print(top_events, row.names = FALSE)
         }
         
         cat("\n=============================================================\n")

@@ -1,0 +1,210 @@
+# =============================================================================
+# EasyColoc 批量处理配置示例
+# =============================================================================
+# 使用方法:
+#   1. 修改此文件添加你的 GWAS 数据集
+#   2. 运行：bash tools/batch_run.sh config/gwas_batch.yaml
+# =============================================================================
+
+datasets:
+  # 示例 1: 自闭症谱系障碍 (ASD)
+  - id: "EUR_ASD"
+    name: "European Ancestry Autism Spectrum Disorder"
+    file: "/path/to/ASD_summary_stats.txt"
+    build: "hg19"        # 基因组版本：hg19 或 hg38
+    type: "cc"           # 病例对照："cc" 或 数量性状："quant"
+    prop: 0.5            # 病例比例 (仅 cc 类型需要)
+    columns:
+      snp: "SNP"         # rsID 列名
+      chrom: "CHR"       # 染色体列名
+      pos: "POS"         # 位置列名
+      beta: "BETA"       # 效应值列名
+      se: "SE"           # 标准误列名
+      pval: "P"          # P 值列名
+      n: "N"             # 样本量列名
+      maf: "EAF"         # 次要等位频率列名 (可选)
+
+  # 示例 2: 体质指数 (BMI)
+  - id: "GIANT_BMI"
+    name: "GIANT Consortium BMI"
+    file: "/path/to/GIANT_BMI_summary.txt"
+    build: "hg38"
+    type: "quant"
+    prop: null           # 数量性状不需要
+    columns:
+      snp: "rsID"
+      chrom: "chromosome"
+      pos: "position"
+      beta: "effect"
+      se: "std_err"
+      pval: "p_value"
+      n: "sample_size"
+      maf: "maf"
+
+  # 示例 3: 精神分裂症 (SCZ)
+  - id: "PGC_SCZ"
+    name: "Psychiatric Genomics Consortium Schizophrenia"
+    file: "/path/to/PGC_SCZ_summary.txt"
+    build: "hg19"
+    type: "cc"
+    prop: 0.42
+    columns:
+      snp: "MarkerName"
+      chrom: "Chr"
+      pos: "Pos"
+      beta: "b"
+      se: "se"
+      pval: "p"
+      n: "N"
+      maf: "MAF"
+
+  # 示例 4: 冠状动脉疾病 (CAD)
+  - id: "CARDIoGRAM_CAD"
+    name: "CARDIoGRAMplusC4D Coronary Artery Disease"
+    file: "/path/to/CAD_summary.txt"
+    build: "hg19"
+    type: "cc"
+    prop: 0.35
+    columns:
+      snp: "rsid"
+      chrom: "chrom"
+      pos: "pos"
+      beta: "beta"
+      se: "se"
+      pval: "pval"
+      n: "total"
+      maf: "eaf"
+
+  # 示例 5: 2 型糖尿病 (T2D)
+  - id: "DIAGRAM_T2D"
+    name: "DIAGRAM Type 2 Diabetes"
+    file: "/path/to/T2D_summary.txt"
+    build: "hg38"
+    type: "cc"
+    prop: 0.48
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      beta: "BETA"
+      se: "SE"
+      pval: "PVALUE"
+      n: "N"
+      maf: "FRQ"
+
+---
+
+## 配置说明
+
+### 必填字段
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `id` | 数据集唯一标识符 (用于输出目录命名) | "EUR_ASD" |
+| `file` | GWAS 汇总统计文件路径 | "/path/to/gwas.txt" |
+| `build` | 基因组版本 | "hg19" 或 "hg38" |
+| `type` | 性状类型 | "cc" (病例对照) 或 "quant" (数量性状) |
+
+### 条件必填字段
+
+| 字段 | 条件 | 说明 |
+|------|------|------|
+| `prop` | type="cc" 时必填 | 病例占总样本的比例 |
+
+### 列名映射
+
+`columns` 字段用于将你的文件格式映射到 EasyColoc 标准格式：
+
+| 标准列 | 说明 | 常见别名 |
+|--------|------|----------|
+| `snp` | SNP 标识符 | SNP, rsID, MarkerName, marker |
+| `chrom` | 染色体 | CHR, Chr, chromosome, chrom |
+| `pos` | 基因组位置 | POS, Pos, position, BP, bp |
+| `beta` | 效应值 | BETA, b, effect, beta, log_odds |
+| `se` | 标准误 | SE, se, std_err, stderr |
+| `pval` | P 值 | P, p, pval, PVALUE, p_value |
+| `n` | 样本量 | N, n, sample_size, total, TOTAL |
+| `maf` | 次要等位频率 (可选) | EAF, MAF, maf, eaf, FRQ, freq |
+
+---
+
+## 输出结构
+
+运行后，输出目录结构如下：
+
+```
+batch_results/
+├── EUR_ASD/                    # 单个 GWAS 结果
+│   ├── config_*.yaml           # 配置文件副本
+│   ├── run_EUR_ASD.log         # 运行日志
+│   └── results/                # 分析结果
+├── GIANT_BMI/
+│   └── ...
+├── merged_colocalization_results.csv   # 合并结果
+├── significant_colocalizations_PP4_0.7.csv  # 显著结果
+├── batch_summary.csv           # 汇总统计
+└── batch_report.html           # 可视化报告
+```
+
+---
+
+## 高级配置
+
+### 覆盖全局参数
+
+如需为特定 GWAS 数据集覆盖全局配置，可添加 `override` 字段：
+
+```yaml
+datasets:
+  - id: "Custom_GWAS"
+    file: "/path/to/gwas.txt"
+    build: "hg19"
+    type: "cc"
+    prop: 0.5
+    override:
+      coloc_settings:
+        pp4_threshold: 0.8      # 自定义 PP4 阈值
+        susie_threshold: 0.5    # 自定义 SuSiE 阈值
+      plot_settings:
+        plot_window_bp: 500000  # 自定义绘图窗口
+```
+
+### 并行处理
+
+修改 `config/global.yaml` 中的核心数以加速处理：
+
+```yaml
+use_parallel: true
+n_cores: 8  # 根据你的服务器调整
+```
+
+---
+
+## 故障排除
+
+### 问题：某个 GWAS 数据集失败
+
+检查单个日志文件：
+```bash
+cat batch_results/EUR_ASD/run_EUR_ASD.log
+```
+
+### 问题：所有数据集都失败
+
+检查全局配置：
+```bash
+cat config/global.yaml
+```
+
+确保参考文件路径正确：
+- `plink_hg38`: 1000 Genomes PLINK 参考
+- `hash_table_dir`: dbSNP 哈希表目录
+- `gene_anno`: GENCODE GTF 文件
+
+### 问题：内存不足
+
+减少并行核心数或增加 `min_snps` 阈值：
+```yaml
+coloc_settings:
+  min_snps: 50  # 增加最小 SNP 数要求
+```

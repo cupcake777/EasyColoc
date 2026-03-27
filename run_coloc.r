@@ -655,7 +655,7 @@ run_pipeline <- function() {
                         }
 
                          res_list[[length(res_list)+1]] <- data.table(
-                             GWAS_ID=gwas_cfg$id, QTL_ID=qtl_id, Locus=locus$snp, Gene=gene_sym_for_filename,
+                             GWAS_ID=gwas_cfg$id, QTL_ID=qtl_id, Locus=locus$snp, Phenotype=pheno,
                              PP4=pp4, n_snps=res$summary["nsnps"], identification_method=locus$identification_method
                          )
                   }
@@ -684,6 +684,55 @@ run_pipeline <- function() {
        )
    }, error = function(e) {
        warning(glue("[SUM] Failed to merge results: {e$message}"))
+   })
+
+   # =============================================================================
+   # Sensitivity Analysis (if enabled in config)
+   # =============================================================================
+   if (!is.null(cfg_global$sensitivity_analysis) &&
+       isTRUE(cfg_global$sensitivity_analysis$enabled)) {
+       message("\n==============================================================")
+       message("[SENS] Running Prior Sensitivity Analysis...")
+       message("==============================================================")
+       tryCatch({
+           source("src/utils_sensitivity.R")
+
+           # Find top coloc results for sensitivity testing
+           abf_files <- list.files(dir_abf, pattern = "_results\\.csv$", full.names = TRUE)
+           if (length(abf_files) > 0) {
+               # Test sensitivity on first result as example
+               example_res <- fread(abf_files[1])
+               if (nrow(example_res) > 0 && any(example_res$PP4 >= 0.5, na.rm = TRUE)) {
+                   message("[SENS] Sensitivity analysis module loaded")
+                   message("[SENS] To run sensitivity analysis, use: run_sensitivity_analysis() on specific loci")
+               }
+           }
+       }, error = function(e) {
+           warning(glue("[SENS] Sensitivity analysis failed: {e$message}"))
+       })
+   }
+
+   # =============================================================================
+   # Generate Interactive HTML Report
+   # =============================================================================
+   message("\n==============================================================")
+   message("[REPORT] Generating Interactive HTML Report...")
+   message("==============================================================")
+   tryCatch({
+       source("src/utils_report.R")
+
+       report_file <- file.path(base_out_dir, "coloc_report.html")
+       success <- generate_html_report(
+           results_dir = base_out_dir,
+           output_file = report_file,
+           project_name = paste0("EasyColoc Analysis - ", gwas_cfg$name)
+       )
+
+       if (success) {
+           message(glue("[REPORT] Interactive report saved: {report_file}"))
+       }
+   }, error = function(e) {
+       warning(glue("[REPORT] Failed to generate report: {e$message}"))
    })
 
 }

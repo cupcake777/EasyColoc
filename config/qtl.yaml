@@ -28,8 +28,8 @@ QTL_all_header:
   - "pos"
   - "ref"
   - "alt"
-  - "variant_id"
-  - "phenotype_id"
+  - "phenotype_id"  # APA event ID (e.g., ENST00000303660.8|ZEB2|chr2:144389317-144390028|-)
+  - "variant_id"    # Variant identifier (e.g., chr2:144000166:C:T)
   - "start_distance"
   - "end_distance"
   - "af"
@@ -40,7 +40,7 @@ QTL_all_header:
   - "slope_se"
 
 QTL_cols:
-  phenotype: "phenotype_id"  # Used for grouping phenotypes
+  phenotype: "phenotype_id"  # APA event ID (e.g., ENST00000304952.11|HES4|chr1:998964-999432|-)
   chrom: "chr"
   pos: "pos"
   pval: "pval_nominal"

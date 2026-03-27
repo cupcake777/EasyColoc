@@ -9,10 +9,24 @@ EasyColoc is an R-based pipeline that performs colocalization analysis between G
 ## Features
 
 - **Multiple Matching Strategies**: rsID direct match, chromosome-position conversion, position+allele matching
-- **Automatic Build Conversion**: Built-in harmonization with gwaslab (hg19 ↔ hg38)
-- **Multiple Coloc Methods**: Traditional ABF method and SuSiE-based fine-mapping
+- **Automatic Build Conversion**: Built-in harmonization with gwaslab (hg19 ↔ hg38) + liftOver fallback
+- **Multiple Coloc Methods**: Traditional ABF method and SuSiE-based fine-mapping with credible sets
+- **Prior Sensitivity Analysis**: Automated robustness testing across different prior settings
+- **Batch Processing**: Process multiple GWAS datasets with a single command
 - **Interactive Visualization**: LocusZoom-style plots with recombination tracks and gene annotations
+- **Docker Support**: Fully containerized for reproducible deployments
 - **Parallel Processing**: Efficient multi-core processing for large datasets
+
+### What's New in v1.2
+
+| Feature | Description |
+|---------|-------------|
+| **APA Support** | Automatic parsing of APA transcript format (e.g., `ENST001\|GENE1\|...`) |
+| **LiftOver Fallback** | Iterative region contraction when gwaslab fails |
+| **Credible Set Extraction** | 95% credible set SNPs with functional annotation |
+| **Sensitivity Analysis** | Test PP4 stability across prior settings |
+| **Batch Wrapper** | Process 10+ GWAS datasets automatically |
+| **Docker Image** | One-command deployment with all dependencies |
 
 ## Data Flow Architecture
 

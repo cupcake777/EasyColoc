@@ -43,6 +43,23 @@ analysis:
 
 harmonization_settings:
   env_name: "gwaslab"
+  liftover_chain: "/home/lyc/share_group_folder/ref/liftover/hg19ToHg38.over.chain.gz"  # For fallback
+
+# Sensitivity analysis configuration
+sensitivity_analysis:
+  enabled: false  # Set to true to enable prior sensitivity analysis
+  output_dir: "./sensitivity"  # Output directory for sensitivity results
+  prior_grid:  # Prior settings to test (set to null for default grid)
+    - {p1: 1.0e-4, p2: 1.0e-4, p12: 1.0e-5}
+    - {p1: 1.0e-3, p2: 1.0e-4, p12: 1.0e-5}
+    - {p1: 1.0e-4, p2: 1.0e-3, p12: 1.0e-5}
+    - {p1: 1.0e-3, p2: 1.0e-3, p12: 1.0e-5}
+    - {p1: 1.0e-5, p2: 1.0e-5, p12: 1.0e-6}
+  heatmap:
+    enabled: true
+    p1_values: [1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2]
+    p2_values: [1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2]
+    p12_ratio: 0.1
 
 plot_settings:
   significance_threshold: 5.0e-8

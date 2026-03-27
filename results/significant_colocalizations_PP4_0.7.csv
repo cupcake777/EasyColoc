@@ -1,0 +1,12 @@
+GWAS_ID,QTL_ID,Locus,Gene,PP4,n_snps,identification_method
+EAS_PD,postnatal,rs11240567,Combined,0.969573877490714,781,Distance_pruning
+EUR_BIP,postnatal,rs314690,Combined,0.950106030370956,1357,Distance_pruning
+EUR_MDD,postnatal,rs9545047,Combined,0.939425188488483,1191,Distance_pruning
+EUR_SCZ,postnatal,rs11638554,Combined,0.897396177034383,871,Distance_pruning
+EUR_PD,postnatal,rs823106,Combined,0.874595188026924,1106,Distance_pruning
+EUR_SCZ,postnatal,rs2710323,Combined,0.756611777813352,1112,Distance_pruning
+EUR_MDD,postnatal,rs11682379,Combined,0.736689970644952,719,Distance_pruning
+EUR_SCZ,postnatal,rs9318627,Combined,0.735906893375941,1328,Distance_pruning
+EUR_ADHD,postnatal,rs1438898,Combined,0.723201250584738,784,Distance_pruning
+EUR_MDD,postnatal,rs1010553,Combined,0.708526418322431,748,Distance_pruning
+EUR_MDD,postnatal,rs1275513,Combined,0.707871859012836,877,Distance_pruning
