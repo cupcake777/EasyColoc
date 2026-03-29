@@ -76,7 +76,7 @@ flowchart TD
     G --> K[HTML report]
 ```
 
-See [ARCHITECTURE.md](/mnt/share_group_folder/work/EasyColoc/docs/ARCHITECTURE.md) for a fuller description.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a fuller description.
 
 ## Main Commands
 
@@ -101,7 +101,7 @@ See [ARCHITECTURE.md](/mnt/share_group_folder/work/EasyColoc/docs/ARCHITECTURE.m
 - `examples/`: minimal demos
 - `templates/`: `easycoloc init` scaffold
 
-Detailed layout notes are in [REPO_LAYOUT.md](/mnt/share_group_folder/work/EasyColoc/docs/REPO_LAYOUT.md).
+Detailed layout notes are in [REPO_LAYOUT.md](docs/REPO_LAYOUT.md).
 
 ## Key Outputs
 
@@ -115,11 +115,11 @@ Detailed layout notes are in [REPO_LAYOUT.md](/mnt/share_group_folder/work/EasyC
 
 ## Documentation
 
-- [TUTORIAL.md](/mnt/share_group_folder/work/EasyColoc/docs/TUTORIAL.md)
-- [ARCHITECTURE.md](/mnt/share_group_folder/work/EasyColoc/docs/ARCHITECTURE.md)
-- [REFERENCE_DATA.md](/mnt/share_group_folder/work/EasyColoc/docs/REFERENCE_DATA.md)
-- [DOCKER.md](/mnt/share_group_folder/work/EasyColoc/docs/DOCKER.md)
-- [COMPETITIVE_POSITIONING.md](/mnt/share_group_folder/work/EasyColoc/docs/COMPETITIVE_POSITIONING.md)
+- [TUTORIAL.md](docs/TUTORIAL.md)
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [REFERENCE_DATA.md](docs/REFERENCE_DATA.md)
+- [DOCKER.md](docs/DOCKER.md)
+- [COMPETITIVE_POSITIONING.md](docs/COMPETITIVE_POSITIONING.md)
 
 ## Validation
 
