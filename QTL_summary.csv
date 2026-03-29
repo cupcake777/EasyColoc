@@ -1,4 +1,0 @@
-Type,NumberRNASeqandGTSamples,NumberRNASeqSamples,Number_of_sigpheno,allPairsTabixFilename,sigPairsTabixFilename
-prenatal,189,204,407,/home/lyc/share_group_folder/work/apa/04_coloc/prenatal.all_pairs.txt.gz,/home/lyc/share_group_folder/work/apa/04_coloc/prenatal.signif_pairs.txt.gz
-postnatal,509,531,1459,/home/lyc/share_group_folder/work/apa/04_coloc/postnatal.all_pairs.txt.gz,/home/lyc/share_group_folder/work/apa/04_coloc/postnatal.signif_pairs.txt.gz
-interaction,698,751,235,/home/lyc/share_group_folder/work/apa/04_coloc/interaction.all_pairs.txt.gz,/home/lyc/share_group_folder/work/apa/04_coloc/interaction.signif_pairs.txt.gz

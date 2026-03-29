@@ -1,0 +1,19 @@
+datasets:
+  - id: "EXAMPLE_GWAS"
+    name: "Example GWAS"
+    file: "data/gwas/example_gwas.tsv.gz"
+    build: "hg38"
+    pop: "EUR"
+    type: "cc"
+    sample_size_n: 100000
+    prop: 0.25
+    columns:
+      snp: "SNP"
+      chrom: "CHR"
+      pos: "BP"
+      a1: "A1"
+      a2: "A2"
+      pval: "P"
+      af: "EAF"
+      beta: "BETA"
+      se: "SE"

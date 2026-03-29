@@ -7,7 +7,7 @@ qtl_info:
   # QTL data build version (hg19 or hg38) - required for coordinate matching
   build: "hg38"
   # Path to QTL metadata CSV (must contain columns below)
-  file: "/home/lyc/share_group_folder/work/EasyColoc/QTL_summary.csv"
+  file: "config/QTL_summary.csv"
   # Column mapping in metadata CSV
   columns:
     # Unique QTL dataset identifier (e.g., "eQTL", "pQTL")

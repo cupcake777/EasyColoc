@@ -1,0 +1,130 @@
+easycoloc_get_config_path <- function(envvar, default_path) {
+  value <- Sys.getenv(envvar, unset = default_path)
+  if (!nzchar(value)) {
+    default_path
+  } else {
+    path.expand(value)
+  }
+}
+
+easycoloc_resolve_project_root <- function(cfg_global, global_config_path) {
+  env_root <- Sys.getenv("EASYCOLOC_PROJECT_ROOT", unset = "")
+  if (nzchar(env_root)) {
+    return(normalizePath(path.expand(env_root), mustWork = FALSE))
+  }
+  if (!is.null(cfg_global$project_root) && nzchar(cfg_global$project_root)) {
+    base_dir <- easycoloc_path_dirname(global_config_path)
+    return(normalizePath(file.path(base_dir, cfg_global$project_root), mustWork = FALSE))
+  }
+  normalizePath(getwd(), mustWork = FALSE)
+}
+
+easycoloc_config_paths <- function() {
+  list(
+    global = easycoloc_get_config_path("EASYCOLOC_GLOBAL_CONFIG", "config/global.yaml"),
+    gwas = easycoloc_get_config_path("EASYCOLOC_GWAS_CONFIG", "config/gwas.yaml"),
+    qtl = easycoloc_get_config_path("EASYCOLOC_QTL_CONFIG", "config/qtl.yaml")
+  )
+}
+
+easycoloc_path_dirname <- function(path) {
+  normalizePath(dirname(path), mustWork = FALSE)
+}
+
+easycoloc_resolve_path <- function(path_value, base_dir) {
+  if (is.null(path_value) || length(path_value) == 0) {
+    return(path_value)
+  }
+  if (!is.character(path_value)) {
+    return(path_value)
+  }
+  resolved <- vapply(path_value, function(single_path) {
+    if (is.na(single_path) || !nzchar(single_path)) {
+      return(single_path)
+    }
+    expanded <- path.expand(single_path)
+    if (grepl("^(/|[A-Za-z]:[/\\\\])", expanded)) {
+      return(expanded)
+    }
+    normalizePath(file.path(base_dir, expanded), mustWork = FALSE)
+  }, character(1))
+  unname(resolved)
+}
+
+easycoloc_resolve_global_paths <- function(cfg_global, base_dir) {
+  path_fields <- c(
+    "output_dir", "temp_dir", "plink_hg19", "plink_hg38", "plink_keep", "hash_table_dir",
+    "recom", "gene_anno", "ref_genome_hg19", "ref_genome_hg38",
+    "1kg_af", "dbsnp_hg19", "dbsnp_hg38", "harmonize_dir"
+  )
+  for (field in path_fields) {
+    if (!is.null(cfg_global[[field]])) {
+        cfg_global[[field]] <- easycoloc_resolve_path(cfg_global[[field]], base_dir)
+    }
+  }
+  if (!is.null(cfg_global$harmonization_settings$liftover_chain)) {
+    cfg_global$harmonization_settings$liftover_chain <- easycoloc_resolve_path(
+      cfg_global$harmonization_settings$liftover_chain,
+      base_dir
+    )
+  }
+  cfg_global
+}
+
+easycoloc_resolve_gwas_paths <- function(cfg_gwas, base_dir) {
+  if (!is.null(cfg_gwas$datasets) && length(cfg_gwas$datasets) > 0) {
+    for (idx in seq_along(cfg_gwas$datasets)) {
+      if (!is.null(cfg_gwas$datasets[[idx]]$file)) {
+        cfg_gwas$datasets[[idx]]$file <- easycoloc_resolve_path(
+          cfg_gwas$datasets[[idx]]$file,
+          base_dir
+        )
+      }
+    }
+  }
+  cfg_gwas
+}
+
+easycoloc_resolve_qtl_paths <- function(cfg_qtl, base_dir) {
+  if (!is.null(cfg_qtl$qtl_info$file)) {
+    cfg_qtl$qtl_info$file <- easycoloc_resolve_path(cfg_qtl$qtl_info$file, base_dir)
+  }
+  cfg_qtl
+}
+
+easycoloc_resolve_qtl_meta_paths <- function(qtl_meta, qtl_summary_path, qtl_cfg) {
+  if (is.null(qtl_meta) || nrow(qtl_meta) == 0) {
+    return(qtl_meta)
+  }
+  base_dir <- easycoloc_path_dirname(qtl_summary_path)
+  path_cols <- c(
+    qtl_cfg$qtl_info$columns$all_filename,
+    qtl_cfg$qtl_info$columns$sig_filename
+  )
+  path_cols <- unique(path_cols[!is.na(path_cols) & nzchar(path_cols)])
+  for (col in path_cols) {
+    if (!is.null(col) && col %in% names(qtl_meta)) {
+      qtl_meta[[col]] <- easycoloc_resolve_path(as.character(qtl_meta[[col]]), base_dir)
+    }
+  }
+  qtl_meta
+}
+
+easycoloc_read_configs <- function() {
+  paths <- easycoloc_config_paths()
+  cfg_global <- yaml::read_yaml(paths$global)
+  project_root <- easycoloc_resolve_project_root(cfg_global, paths$global)
+  cfg_gwas <- yaml::read_yaml(paths$gwas)
+  cfg_qtl <- yaml::read_yaml(paths$qtl)
+  output_override <- Sys.getenv("EASYCOLOC_OUTPUT_DIR", unset = "")
+  if (nzchar(output_override)) {
+    cfg_global$output_dir <- output_override
+  }
+  list(
+    paths = paths,
+    project_root = project_root,
+    global = easycoloc_resolve_global_paths(cfg_global, project_root),
+    gwas = easycoloc_resolve_gwas_paths(cfg_gwas, project_root),
+    qtl = easycoloc_resolve_qtl_paths(cfg_qtl, project_root)
+  )
+}

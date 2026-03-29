@@ -55,6 +55,118 @@ safe_character <- function(x, default = NA_character_) {
     as.character(x)
 }
 
+normalize_chrom_label <- function(chrom) {
+  chrom_clean <- gsub("^chr", "", safe_character(chrom), ignore.case = TRUE)
+  paste0("chr", chrom_clean)
+}
+
+format_plot_label <- function(label, fallback = "Gene") {
+  label_chr <- safe_character(label, default = fallback)
+  if (is.na(label_chr) || !nzchar(label_chr)) return(fallback)
+
+  if (grepl("|", label_chr, fixed = TRUE)) {
+    label_parts <- strsplit(label_chr, "|", fixed = TRUE)[[1]]
+    if (length(label_parts) >= 2 && nzchar(label_parts[2])) {
+      return(label_parts[2])
+    }
+  }
+
+  label_chr
+}
+
+format_qtl_label <- function(qtl_type) {
+  qtl_chr <- safe_character(qtl_type, default = "")
+  if (is.na(qtl_chr) || !nzchar(qtl_chr)) return("")
+  gsub("_", " ", qtl_chr, fixed = TRUE)
+}
+
+parse_feature_region <- function(label) {
+  label_chr <- safe_character(label, default = "")
+  if (is.na(label_chr) || !nzchar(label_chr)) return(NULL)
+
+  region_match <- regexec("(chr[[:alnum:]]+):([0-9,]+)-([0-9,]+)", label_chr)
+  region_parts <- regmatches(label_chr, region_match)[[1]]
+  if (length(region_parts) != 4) return(NULL)
+
+  list(
+    chrom = region_parts[2],
+    start = suppressWarnings(as.numeric(gsub(",", "", region_parts[3]))),
+    end = suppressWarnings(as.numeric(gsub(",", "", region_parts[4])))
+  )
+}
+
+resolve_plot_window <- function(leadSNP_DF, pos_col, chr_col,
+                                lead_snp_val = NULL,
+                                plot_window_bp = 200000,
+                                phenotype_info = NULL) {
+  positions <- safe_numeric(leadSNP_DF[[pos_col]])
+  positions <- positions[!is.na(positions) & positions > 0]
+  if (length(positions) == 0) return(NULL)
+
+  if (!is.null(lead_snp_val)) {
+    snp_col <- resolve_col(leadSNP_DF, "rsid", c("snp", "SNP", "marker"))
+    if (!is.null(snp_col)) {
+      lead_row <- leadSNP_DF[leadSNP_DF[[snp_col]] == lead_snp_val, ]
+      if (nrow(lead_row) > 0) {
+        center_pos <- safe_numeric(lead_row[[pos_col]][1])
+        min_pos <- center_pos - plot_window_bp
+        max_pos <- center_pos + plot_window_bp
+      } else {
+        min_pos <- min(positions)
+        max_pos <- max(positions)
+      }
+    } else {
+      min_pos <- min(positions)
+      max_pos <- max(positions)
+    }
+  } else {
+    min_pos <- min(positions)
+    max_pos <- max(positions)
+  }
+
+  chrom_num <- safe_character(leadSNP_DF[[chr_col]])[1]
+  chrom_label <- normalize_chrom_label(chrom_num)
+  base_min_pos <- min_pos
+  base_max_pos <- max_pos
+
+  feature_region <- parse_feature_region(phenotype_info)
+  if (!is.null(feature_region) &&
+      identical(normalize_chrom_label(feature_region$chrom), chrom_label) &&
+      !is.na(feature_region$start) && !is.na(feature_region$end)) {
+    min_pos <- min(min_pos, feature_region$start)
+    max_pos <- max(max_pos, feature_region$end)
+  }
+
+  list(
+    min_pos = min_pos,
+    max_pos = max_pos,
+    base_min_pos = base_min_pos,
+    base_max_pos = base_max_pos,
+    chrom_num = chrom_num,
+    chrom_label = chrom_label,
+    feature_region = feature_region,
+    expanded = (min_pos != base_min_pos || max_pos != base_max_pos)
+  )
+}
+
+placeholder_plot <- function(label, detail = NULL) {
+  label_text <- if (!is.null(detail) && nzchar(detail)) {
+    paste(label, detail, sep = "\n")
+  } else {
+    label
+  }
+
+  ggplot(data.frame(x = 0.5, y = 0.5, label = label_text), aes(x = x, y = y)) +
+    geom_text(aes(label = label), size = 4, lineheight = 1.1) +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    theme_void() +
+    theme(
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+}
+
 ld_extract <- function(variants, bfile, plink_bin) {
   variants <- unique(as.character(variants))
   if (length(variants) == 0) return(NULL)
@@ -122,11 +234,12 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
                     region_recomb = NULL, xlim = NULL,
                     show_lead_line = FALSE,
                     colocalized_snp = NULL,
-                    credible_set = NULL) {
+                    credible_set = NULL,
+                    gwas_display_threshold = NULL) {
 
    df <- safe_df_convert(df)
   if (is.null(df)) {
-    return(ggplot() + theme_void() + geom_text(aes(x=0, y=0, label="No Input Data")))
+    return(placeholder_plot("No Input Data"))
   }
 
   col_snp <- resolve_col(df, "rsid", c("SNPID.gwas", "snp", "SNP", "SNPID", "marker"))
@@ -135,7 +248,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   col_p   <- resolve_col(df, "p_value", c("P", "pval", "P.qtl", "P.gwas"))
 
   if (is.null(col_snp) || is.null(col_chr) || is.null(col_pos) || is.null(col_p)) {
-    return(ggplot() + theme_void() + geom_text(aes(x=0, y=0, label="Missing Columns")))
+    return(placeholder_plot("Missing Columns"))
   }
 
   plot_df <- data.frame(
@@ -145,6 +258,12 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
     p_value = safe_numeric(df[[col_p]]),
     stringsAsFactors = FALSE
   )
+  col_gwas_p <- resolve_col(df, "P.gwas", c("p_gwas", "gwas_p", "pval_gwas"))
+  if (!is.null(col_gwas_p)) {
+    plot_df$gwas_p <- safe_numeric(df[[col_gwas_p]])
+  } else {
+    plot_df$gwas_p <- NA_real_
+  }
   rsid_sample <- head(plot_df$rsid[!is.na(plot_df$rsid)], 3)
   is_rsid_format <- all(grepl("^rs", rsid_sample))
   message(glue("[LD_plot] SNP column: {col_snp}, Sample: {paste(rsid_sample, collapse=', ')}, Is rsID format: {is_rsid_format}"))
@@ -156,13 +275,13 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   ]
 
   if (nrow(plot_df) == 0) {
-    return(ggplot() + theme_void() + geom_text(aes(x=0, y=0, label="No Valid SNPs")))
+    return(placeholder_plot("No Valid SNPs"))
   }
 
   if (!is.null(xlim) && length(xlim) == 2) {
     plot_df <- plot_df[plot_df$position >= xlim[1] & plot_df$position <= xlim[2], ]
     if (nrow(plot_df) == 0) {
-      return(ggplot() + theme_void() + geom_text(aes(x=0, y=0, label="No SNPs in Window")))
+      return(placeholder_plot("No SNPs in Window"))
     }
   }
 
@@ -270,6 +389,34 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
        cs_pp <- credible_set$SNP.PP.H4
    }
 
+   # Create is_credible column based on credible_set
+   plot_df$is_credible <- FALSE
+   if (length(cs_snps) > 0 && nrow(plot_df) > 0) {
+       # Match SNPs, ensuring proper handling of NA values
+       rsid_clean <- as.character(plot_df$rsid)
+       cs_snps_clean <- as.character(cs_snps)
+       credible_match <- rsid_clean %in% cs_snps_clean
+       # Handle NA rsids by setting them to FALSE
+       credible_match[is.na(credible_match)] <- FALSE
+       # Ensure length matches
+       if (length(credible_match) == nrow(plot_df)) {
+           plot_df$is_credible <- credible_match
+       } else {
+           message("[LD_plot] Warning: Length mismatch in credible_set assignment")
+           plot_df$is_credible <- rep(FALSE, nrow(plot_df))
+       }
+   }
+
+   if (!is.null(gwas_display_threshold) && !all(is.na(plot_df$gwas_p))) {
+       keep_mask <- (!is.na(plot_df$gwas_p) & plot_df$gwas_p <= gwas_display_threshold) |
+         plot_df$is_lead | plot_df$is_credible
+       kept_n <- sum(keep_mask, na.rm = TRUE)
+       if (kept_n > 0 && kept_n < nrow(plot_df)) {
+           message(glue("[LD_plot] Filtering displayed SNPs by GWAS threshold {signif(gwas_display_threshold, 3)}: {kept_n}/{nrow(plot_df)} retained"))
+           plot_df <- plot_df[keep_mask, , drop = FALSE]
+       }
+   }
+
   # ==========================================================================
   # LD Color Scale: Viridis (perceptually uniform, colorblind-friendly)
   # ==========================================================================
@@ -286,7 +433,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   )
   plot_df$color_code <- as.character(plot_df$color_code)
   plot_df$color_code[plot_df$is_lead] <- "#7F3C8D"
-  plot_df$color_code[plot_df$is_credible] <- "#E67E22"  # orange for credible set
+  plot_df$color_code[plot_df$is_credible & !plot_df$is_lead] <- "#E67E22"
 
   maxlogP <- max(-log10(plot_df$p_value), na.rm = TRUE)
   if (is.infinite(maxlogP) || maxlogP < 1) maxlogP <- 10
@@ -331,10 +478,10 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
           p <- p +
             geom_ribbon(data = region_recomb,
                         aes(x = pos_mapped/1e6, ymin = ymin_auto, ymax = pmax(scaled_rate, ymin_auto)),
-                        fill = "#DEEBF7", alpha = 0.5, inherit.aes = FALSE) +
+                        fill = "#DCEAF7", alpha = 0.65, inherit.aes = FALSE) +
             geom_line(data = region_recomb,
                       aes(x = pos_mapped/1e6, y = scaled_rate),
-                      color = "#3182BD", linewidth = 0.6, alpha = 0.8, inherit.aes = FALSE)
+                      color = "#2E6F95", linewidth = 0.75, alpha = 0.9, inherit.aes = FALSE)
         }
       }
     }
@@ -350,14 +497,15 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
 
   # --- Plot points in 3 layers: background, credible set, lead SNP ---
   df_bg <- plot_df[!plot_df$is_lead & !plot_df$is_credible, ]
-  df_cs <- plot_df[plot_df$is_credible, ]
+  df_cs <- plot_df[plot_df$is_credible & !plot_df$is_lead, ]
   df_lead <- plot_df[plot_df$is_lead, ]
 
   # Layer 1: Background SNPs (circles)
   if (nrow(df_bg) > 0) {
     p <- p + geom_point(data = df_bg,
                  aes(x = position/1e6, y = -log10(p_value), fill = color_code),
-                 shape = 21, stroke = 0, size = 2.5, alpha = 0.7)
+                 shape = 21, color = "#FFFFFF",
+                 stroke = 0.18, size = 2.8, alpha = 0.66)
   }
   # Layer 2: Credible set SNPs (circles, orange, slightly larger)
   # Use aes(fill=color_code) so the fill value goes through scale_fill_identity legend
@@ -365,7 +513,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
     p <- p + geom_point(data = df_cs,
                  aes(x = position/1e6, y = -log10(p_value), fill = color_code),
                  shape = 21, color = "#D35400",
-                 stroke = 0.8, size = 4, alpha = 1)
+                 stroke = 0.72, size = 3.3, alpha = 0.9)
   }
   # Layer 3: Lead SNP (diamond, purple)
   # Use aes(fill=color_code) so the fill value goes through scale_fill_identity legend
@@ -373,11 +521,11 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
     p <- p + geom_point(data = df_lead,
                  aes(x = position/1e6, y = -log10(p_value), fill = color_code),
                  shape = 23, color = "#5B2C6F",
-                 stroke = 0.8, size = 5, alpha = 1)
+                 stroke = 0.82, size = 3.8, alpha = 0.96)
   }
 
   p <- p + geom_hline(yintercept = -log10(5e-8), 
-               linetype = "dashed", color = "grey30", linewidth = 0.6)
+               linetype = "dashed", color = "#6B7280", linewidth = 0.6)
   
   # --- Label lead SNP + credible set SNPs using ggrepel ---
   label_df <- data.frame(
@@ -398,14 +546,14 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
 
   # Add credible set labels (top 5 by PP.H4)
   if (nrow(df_cs) > 0 && length(cs_snps) > 0) {
-    max_cs_labels <- min(5, nrow(df_cs))
+    max_cs_labels <- min(2, nrow(df_cs))
     cs_pp_for_sort <- cs_pp[match(df_cs$rsid, cs_snps)]
     cs_order <- order(-cs_pp_for_sort, na.last = TRUE)
     df_cs_top <- df_cs[cs_order[seq_len(max_cs_labels)], ]
     for (i in seq_len(nrow(df_cs_top))) {
       cs_rsid <- df_cs_top$rsid[i]
       pp_val <- cs_pp[match(cs_rsid, cs_snps)]
-      pp_label <- if (!is.na(pp_val)) paste0(cs_rsid, " (", sprintf("%.2f", pp_val), ")") else cs_rsid
+      pp_label <- cs_rsid
       label_df <- rbind(label_df, data.frame(
         x = df_cs_top$position[i]/1e6,
         y = -log10(df_cs_top$p_value[i]),
@@ -421,49 +569,60 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       data = label_df,
       aes(x = x, y = y, label = label),
       color = label_df$color,
-      size = ifelse(label_df$is_lead, 3.2, 2.8),
+      size = ifelse(label_df$is_lead, 2.9, 2.45),
       fontface = "bold",
-      direction = "y",
-      nudge_y = (maxlogP - minlogP) * 0.06,
-      segment.color = "grey50",
-      segment.size = 0.3,
+      direction = "both",
+      nudge_y = (maxlogP - minlogP) * 0.035,
+      segment.color = "#A0AAB4",
+      segment.size = 0.22,
       segment.linetype = "dotted",
-      min.segment.length = 0.3,
-      box.padding = 0.4,
-      point.padding = 0.3,
-      max.overlaps = 20,
-      force = 2,
+      min.segment.length = 0.1,
+      box.padding = 0.42,
+      point.padding = 0.32,
+      max.overlaps = 8,
+      force = 2.4,
+      force_pull = 0.7,
+      max.time = 3,
+      max.iter = 30000,
       inherit.aes = FALSE
     )
   }
   
   # --- Build legend with lead SNP (diamond) + credible set (orange) + LD colors ---
-  ld_colors_all <- c("#D73027", "#FDB863", "#74ADD1", "#4575B4", "#313695")
-  ld_labels_all <- c("0.8 \u2013 1.0", "0.6 \u2013 0.8", "0.4 \u2013 0.6", "0.2 \u2013 0.4", "< 0.2")
+  # Use the same viridis colors as defined above for data coloring
+  ld_colors_all <- vir_colors
+  ld_labels_all <- c("0.8-1.0", "0.6-0.8", "0.4-0.6", "0.2-0.4", "< 0.2")
   # Only keep LD bins that actually have SNPs in the data
   present_ld <- ld_colors_all %in% unique(plot_df$color_code)
   ld_colors <- ld_colors_all[present_ld]
   ld_labels <- ld_labels_all[present_ld]
-  # Start with lead SNP (always present)
-  legend_breaks <- c("#7F3C8D", ld_colors)
-  legend_labels <- c("Lead SNP", ld_labels)
-  legend_shapes <- c(23, rep(21, length(ld_colors)))
-  # Add credible set entry if present
-  if (nrow(df_cs) > 0) {
-    legend_breaks <- c(legend_breaks[1], "#E67E22", legend_breaks[-1])
-    legend_labels <- c(legend_labels[1], "95% Credible Set", legend_labels[-1])
-    legend_shapes <- c(23, 21, rep(21, length(ld_colors)))
+  
+  # Build legend breaks and labels
+  # Note: override.aes shape must be SCALAR (not vector) for scale_fill_identity
+  legend_breaks <- c("#7F3C8D", "#E67E22", ld_colors)
+  legend_labels <- c("Lead SNP", "95% CS", ld_labels)
+  
+  # Remove credible set if not present
+  if (nrow(df_cs) == 0) {
+    legend_breaks <- c("#7F3C8D", ld_colors)
+    legend_labels <- c("Lead SNP", ld_labels)
   }
+
+  legend_ncol <- 1
+  legend_nrow <- length(legend_breaks)
+  
   p <- p +
     scale_fill_identity(
-      name = expression(italic(r)^2 ~ "with lead SNP"),
+      name = "LD (r2)",
       labels = legend_labels,
       breaks = legend_breaks,
+      drop = FALSE,
       guide = guide_legend(
-        override.aes = list(shape = legend_shapes, size = 4, alpha = 1, stroke = 0.5),
+        override.aes = list(shape = 21, size = 3.1, alpha = 1, stroke = 0.4),
         title.position = "top",
-        title.hjust = 0.5,
-        nrow = length(legend_breaks),
+        title.hjust = 0,
+        nrow = legend_nrow,
+        ncol = legend_ncol,
         byrow = TRUE
       )
     ) +
@@ -471,32 +630,39 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       title = plot_title,
       subtitle = plot_subtitle,
       x = NULL,
-      y = expression(-log[10] ~ italic(P))
+      y = expression(-log[10] ~ italic(P)),
+      caption = glue(
+        "lead {lead_snp} | proxies {high_ld_count} | cs95 {nrow(df_cs)}"
+      )
     ) +
-    theme_classic(base_size = 11, base_family = "sans") +
+    theme_classic(base_size = 9.2, base_family = "sans") +
     theme(
-      legend.position = c(1, 1),
-      legend.justification = c(1, 1),
-      legend.title = element_text(size = 10, face = "bold"),
-      legend.text = element_text(size = 9),
-      legend.key.size = unit(0.7, "lines"),
-      legend.key.height = unit(0.8, "lines"),
-      legend.background = element_blank(),
-      legend.margin = margin(t = 3, r = 3, b = 3, l = 3),
+      legend.position = c(0.02, 0.98),
+      legend.justification = c(0, 1),
+      legend.title = element_text(size = 7.8, face = "bold"),
+      legend.text = element_text(size = 7.1),
+      legend.key.size = unit(0.5, "lines"),
+      legend.key.height = unit(0.55, "lines"),
+      legend.background = element_rect(fill = "#FFFFFFF2", color = "#D8E1EA", linewidth = 0.5),
+      legend.margin = margin(t = 4, r = 4, b = 4, l = 4),
       legend.box.spacing = unit(0, "pt"),
-      axis.line = element_line(color = "black", linewidth = 0.6),
+      axis.line = element_blank(),
       axis.line.x = element_blank(),
-      axis.ticks = element_line(color = "black", linewidth = 0.5),
-      axis.ticks.length = unit(0.12, "cm"),
+      axis.ticks = element_line(color = "#243447", linewidth = 0.4),
+      axis.ticks.length = unit(0.08, "cm"),
       axis.ticks.x = element_blank(),
-      axis.text.y = element_text(size = 10, color = "black"),
+      axis.text.y = element_text(size = 8.2, color = "#203040"),
       axis.text.x = element_blank(),
-      axis.title.y = element_text(size = 11, face = "bold", margin = margin(r = 6)),
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5, margin = margin(b = 2)),
-      plot.subtitle = element_text(size = 10, color = "grey30", hjust = 0.5, margin = margin(b = 4)),
-      plot.margin = margin(t = 8, r = 5, b = 2, l = 8, unit = "pt"),
-      panel.background = element_rect(fill = "white"),
-      panel.grid.major = element_blank(),
+      axis.title.y = element_text(size = 9.1, face = "bold", margin = margin(r = 4)),
+      plot.title = element_text(size = 11.5, face = "bold", color = "#12233B", hjust = 0, margin = margin(b = 1)),
+      plot.subtitle = element_text(size = 8.1, color = "#4A5A6A", hjust = 0, margin = margin(b = 4)),
+      plot.caption = element_text(size = 7.1, color = "#5B6775", hjust = 0, margin = margin(t = 3)),
+      plot.margin = margin(t = 6, r = 6, b = 2, l = 6, unit = "pt"),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "#FBFCFD", color = NA),
+      panel.border = element_rect(fill = NA, color = "#D8E1EA", linewidth = 0.45),
+      panel.grid.major.y = element_line(color = "#E7EDF3", linewidth = 0.35),
+      panel.grid.major.x = element_blank(),
       panel.grid.minor = element_blank()
     )
 
@@ -515,8 +681,8 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       )
     ) +
     theme(
-      axis.title.y.right = element_text(size = 10, face = "bold", margin = margin(l = 6)),
-      axis.text.y.right = element_text(size = 9, color = "black")
+      axis.title.y.right = element_text(size = 8.7, face = "bold", color = "#2E6F95", margin = margin(l = 4)),
+      axis.text.y.right = element_text(size = 7.8, color = "#2E6F95")
     )
   } else {
     p <- p + scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
@@ -529,8 +695,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
 }
 
 genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = FALSE) {
-    chrom_clean <- gsub("^chr", "", as.character(chrom_str))
-    chrom_str <- paste0("chr", chrom_clean)
+    chrom_str <- normalize_chrom_label(chrom_str)
     
     if (is.null(xlim_bp) || length(xlim_bp) != 2) {
       xlim_bp <- c(0, 1e6)
@@ -658,8 +823,8 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
           ) +
           theme(
             plot.margin = margin(t = 2, r = 5, b = 8, l = 8, unit = "pt"),
-            axis.text.x = element_text(size = 10, color = "black"),
-            axis.title.x = element_text(size = 11, face = "bold", margin = margin(t = 6)),
+            axis.text.x = element_text(size = 8.2, color = "black"),
+            axis.title.x = element_text(size = 9, face = "bold", margin = margin(t = 5)),
             axis.ticks.x = element_line(color = "black", linewidth = 0.5),
             axis.ticks.length.x = unit(0.12, "cm"),
             axis.line.x = element_line(color = "black", linewidth = 0.6)
@@ -700,10 +865,23 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
     max_y_level <- max(tx_df$y)
     
     tx_df$color <- ifelse(tx_df$strand == "+", "#D73027", "#4575B4")
+    lane_df <- data.frame(
+      ymin = seq(0.5, max_y_level - 0.5, by = 1),
+      ymax = seq(1.5, max_y_level + 0.5, by = 1),
+      fill = rep(c("#F8FAFC", "#F1F5F9"), length.out = max_y_level),
+      stringsAsFactors = FALSE
+    )
     p <- ggplot(tx_df)
+    p <- p + geom_rect(
+      data = lane_df,
+      aes(xmin = xlim_bp[1]/1e6, xmax = xlim_bp[2]/1e6, ymin = ymin, ymax = ymax),
+      inherit.aes = FALSE,
+      fill = lane_df$fill,
+      alpha = 1
+    )
     p <- p + geom_segment(
       aes(x = start/1e6, xend = end/1e6, y = y, yend = y, color = strand),
-      linewidth = 2,
+      linewidth = 1.8,
       lineend = "round"
     )
     arrow_length <- (BPStop - BPStart) * 0.015
@@ -715,7 +893,7 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
         aes(x = (end - arrow_length)/1e6, xend = end/1e6, y = y, yend = y),
         arrow = arrow(length = unit(0.18, "cm"), type = "closed"),
         color = "#D73027",
-        linewidth = 1.1
+        linewidth = 0.95
       )
     }
     
@@ -726,23 +904,23 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
         aes(x = (start + arrow_length)/1e6, xend = start/1e6, y = y, yend = y),
         arrow = arrow(length = unit(0.18, "cm"), type = "closed"),
         color = "#4575B4",
-        linewidth = 1.1
+        linewidth = 0.95
       )
     }
     p <- p + geom_text_repel(
       aes(x = (start + end)/2e6, y = y, label = symbol, color = strand),
-      size = 3, 
+      size = 2.2,
       fontface = "bold.italic",
       direction = "y",
-      nudge_y = 0.3,
-      segment.color = "grey60",
-      segment.size = 0.25,
+      nudge_y = 0.18,
+      segment.color = "#A0AAB4",
+      segment.size = 0.2,
       segment.linetype = "dotted",
       min.segment.length = 0.2,
-      box.padding = 0.2,
+      box.padding = 0.12,
       point.padding = 0.1,
-      max.overlaps = 30,
-      force = 1.5,
+      max.overlaps = 18,
+      force = 1.1,
       show.legend = FALSE
     )
     p <- p +
@@ -754,20 +932,23 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
       scale_x_continuous(
         limits = xlim_bp/1e6, 
         expand = expansion(mult = c(0.01, 0.01)),
-        name = paste0("Position on ", chrom_str, " (Mb)")
+        name = paste0("Genomic position on ", chrom_str, " (Mb)")
       ) +
       scale_y_continuous(limits = c(0.3, max_y_level + 1.2), expand = c(0, 0)) +
       theme_void() +
       theme(
-        plot.margin = margin(t = 2, r = 5, b = 8, l = 8, unit = "pt"),
-        axis.text.x = element_text(size = 10, color = "black"),
-        axis.title.x = element_text(size = 11, face = "bold", margin = margin(t = 6)),
-        axis.ticks.x = element_line(color = "black", linewidth = 0.5),
-        axis.ticks.length.x = unit(0.12, "cm"),
-        axis.line.x = element_line(color = "black", linewidth = 0.6),
+        plot.margin = margin(t = 2, r = 6, b = 4, l = 6, unit = "pt"),
+        plot.background = element_rect(fill = "white", color = NA),
+        panel.background = element_rect(fill = "white", color = NA),
+        panel.border = element_rect(fill = NA, color = "#D8E1EA", linewidth = 0.45),
+        axis.text.x = element_text(size = 7.8, color = "#203040"),
+        axis.title.x = element_text(size = 8.6, face = "bold", margin = margin(t = 4)),
+        axis.ticks.x = element_line(color = "#243447", linewidth = 0.4),
+        axis.ticks.length.x = unit(0.08, "cm"),
+        axis.line.x = element_blank(),
         legend.position = if(show_strand_legend) "bottom" else "none",
-        legend.title = element_text(size = 9, face = "bold"),
-        legend.text = element_text(size = 8)
+        legend.title = element_text(size = 8, face = "bold"),
+        legend.text = element_text(size = 7.2)
       )
 
     return(p)
@@ -775,6 +956,7 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
 
 plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
                                  ld_df = NULL, gtf_path = NULL, region_recomb = NULL,
+                                 recomb_path = NULL,
                                  show_lead_line = FALSE,
                                  qtl_type = NULL, phenotype_info = NULL,
                                  significance_threshold = 5e-8,
@@ -801,44 +983,78 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
       return(NULL)
     }
 
-    positions <- safe_numeric(leadSNP_DF[[pos_col]])
-    positions <- positions[!is.na(positions) & positions > 0]
-
-    if (!is.null(lead_snp_val)) {
-        snp_col <- resolve_col(leadSNP_DF, "rsid", c("snp", "SNP", "marker"))
-        if (!is.null(snp_col)) {
-          lead_row <- leadSNP_DF[leadSNP_DF[[snp_col]] == lead_snp_val, ]
-          if (nrow(lead_row) > 0) {
-              center_pos <- safe_numeric(lead_row[[pos_col]][1])
-              # Use configurable plot_window_bp (default 200kb, from config/global.yaml)
-              min_pos <- center_pos - plot_window_bp
-              max_pos <- center_pos + plot_window_bp
-          } else {
-              min_pos <- min(positions)
-              max_pos <- max(positions)
-          }
-        } else {
-          min_pos <- min(positions)
-          max_pos <- max(positions)
-        }
-    } else {
-        min_pos <- min(positions)
-        max_pos <- max(positions)
+    window_info <- resolve_plot_window(
+        leadSNP_DF = leadSNP_DF,
+        pos_col = pos_col,
+        chr_col = chr_col,
+        lead_snp_val = lead_snp_val,
+        plot_window_bp = plot_window_bp,
+        phenotype_info = phenotype_info
+    )
+    if (is.null(window_info)) {
+      message("[ERROR] Cannot resolve plotting window")
+      return(NULL)
     }
 
-    chrom_num <- safe_character(leadSNP_DF[[chr_col]])[1]
+    min_pos <- window_info$min_pos
+    max_pos <- window_info$max_pos
+    chrom_num <- window_info$chrom_num
+    chrom_label <- window_info$chrom_label
 
     # Build title: format 'QTLtype_Phenotypegene' (e.g., 'stage3_apa_ARL3')
+    display_label <- format_plot_label(gene_sym, fallback = format_plot_label(phenotype_info))
+
+    qtl_label <- format_qtl_label(qtl_type)
+
     if (!is.null(qtl_type) && !is.null(phenotype_info)) {
-        plot_title_str <- paste0(qtl_type, "_", gene_sym)
+        plot_title_str <- paste0(qtl_label, " / ", display_label)
     } else if (!is.null(qtl_type)) {
-        plot_title_str <- paste0(qtl_type, "_", gene_sym)
+        plot_title_str <- paste0(qtl_label, " / ", display_label)
     } else {
-        plot_title_str <- paste(lead_snp_val, "\u2013", gene_sym, "QTL")
+        plot_title_str <- paste(lead_snp_val, "-", display_label, "QTL")
     }
 
-    # Build subtitle: genomic region (e.g., 'chr10:102673231-102676941')
-    plot_subtitle_str <- paste0("chr", chrom_num, ":", format(as.integer(min_pos), big.mark=""), "\u2013", format(as.integer(max_pos), big.mark=""))
+    plot_subtitle_str <- paste0(
+        chrom_label, ":",
+        format(as.integer(min_pos), big.mark = ","),
+        "-",
+        format(as.integer(max_pos), big.mark = ",")
+    )
+
+    if (isTRUE(window_info$expanded)) {
+        plot_subtitle_str <- paste0(
+            chrom_label, ":",
+            format(as.integer(min_pos), big.mark = ","),
+            "-",
+            format(as.integer(max_pos), big.mark = ",")
+        )
+        message(glue("[plot_qtl_association] Expanded plot window to cover phenotype transcript: {plot_subtitle_str}"))
+    }
+
+    recomb_needs_reload <- is.null(region_recomb) || !is.data.frame(region_recomb) || nrow(region_recomb) == 0
+    if (!recomb_needs_reload && !is.null(recomb_path)) {
+        recomb_pos_col <- resolve_col(region_recomb, "Position(bp)", c("position", "pos", "bp"))
+        if (!is.null(recomb_pos_col)) {
+            recomb_pos <- safe_numeric(region_recomb[[recomb_pos_col]])
+            recomb_pos <- recomb_pos[!is.na(recomb_pos)]
+            if (length(recomb_pos) > 0) {
+                recomb_needs_reload <- min(recomb_pos) > min_pos || max(recomb_pos) < max_pos
+            } else {
+                recomb_needs_reload <- TRUE
+            }
+        } else {
+            recomb_needs_reload <- TRUE
+        }
+    }
+
+    if (recomb_needs_reload && !is.null(recomb_path)) {
+        region_recomb <- tryCatch({
+            load_recomb_map(chrom_label, min_pos, max_pos, recomb_path)
+        }, error = function(e) {
+            message(glue("[plot_qtl_association] Recombination reload failed: {e$message}"))
+            region_recomb
+        })
+    }
 
     p_assoc <- tryCatch({
         LD_plot(
@@ -853,21 +1069,31 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
             xlim = c(min_pos, max_pos),
             show_lead_line = show_lead_line,
             colocalized_snp = lead_snp_val,
-            credible_set = credible_set
+            credible_set = credible_set,
+            gwas_display_threshold = significance_threshold
         )
     }, error = function(e) {
         message(glue("[ERROR] LD plot failed: {e$message}"))
-        ggplot() + theme_void() + geom_text(aes(x=0, y=0, label=paste("Error:", e$message)))
+        placeholder_plot("LD Plot Error", e$message)
     })
 
     p_track <- tryCatch({
         genetrack(chrom_num, c(min_pos, max_pos), gtf_path = gtf_path)
     }, error = function(e) {
         message(glue("[ERROR] Gene track failed: {e$message}"))
-        ggplot() + theme_void()
+        placeholder_plot("Gene Track Error", e$message)
     })
-ggarrange(p_assoc, p_track, 
-              ncol = 1, 
-              heights = c(3, 1.5),
-              align = "v")
+
+    # Combine LD plot and gene track
+    tryCatch({
+        ggarrange(p_assoc, p_track,
+                  ncol = 1,
+                  heights = c(3.8, 0.95),
+                  align = "v")
+    }, error = function(e) {
+        message(glue("[ERROR] ggarrange failed: {e$message}"))
+        # Return just the LD plot if arrangement fails
+        message("[WARN] Returning LD plot only (no gene track)")
+        p_assoc
+    })
 }

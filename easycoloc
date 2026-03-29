@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${repo_root}"
+
+show_help() {
+  cat <<'EOF'
+EasyColoc CLI
+
+Usage:
+  ./easycoloc <command> [options]
+
+Commands:
+  run        Run the main pipeline (`--managed` for wrapped execution)
+  doctor     Validate configs, core inputs and external dependencies
+  init       Scaffold a portable EasyColoc project template
+  check      Check whether a run completed successfully
+  status     Summarize per-GWAS progress and output counts
+  monitor    Print the latest runtime heartbeat and output snapshot
+  manifest   Build an output manifest for an existing results directory
+  refs       List required and optional reference resources
+  bootstrap-refs  Materialize shared references into a project-local layout
+  smoke      Run repository smoke tests
+  demo       Render the minimal synthetic plot demo
+  help       Show this help text
+
+Common run options:
+  --global PATH
+  --gwas PATH
+  --qtl PATH
+  --output-dir PATH
+EOF
+}
+
+set_config_envs() {
+  local global_cfg="$1"
+  local gwas_cfg="$2"
+  local qtl_cfg="$3"
+  if [[ -n "${global_cfg}" ]]; then
+    export EASYCOLOC_GLOBAL_CONFIG="${global_cfg}"
+  fi
+  if [[ -n "${gwas_cfg}" ]]; then
+    export EASYCOLOC_GWAS_CONFIG="${gwas_cfg}"
+  fi
+  if [[ -n "${qtl_cfg}" ]]; then
+    export EASYCOLOC_QTL_CONFIG="${qtl_cfg}"
+  fi
+}
+
+parse_common_flags() {
+  local global_cfg=""
+  local gwas_cfg=""
+  local qtl_cfg=""
+  local output_dir=""
+  local managed="false"
+  local passthrough=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --global)
+        global_cfg="${2:?missing value for --global}"
+        shift 2
+        ;;
+      --gwas)
+        gwas_cfg="${2:?missing value for --gwas}"
+        shift 2
+        ;;
+      --qtl)
+        qtl_cfg="${2:?missing value for --qtl}"
+        shift 2
+        ;;
+      --output-dir)
+        output_dir="${2:?missing value for --output-dir}"
+        shift 2
+        ;;
+      --managed)
+        managed="true"
+        shift
+        ;;
+      --help|-h)
+        passthrough+=("--help")
+        shift
+        ;;
+      *)
+        passthrough+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  COMMON_GLOBAL_CFG="${global_cfg}"
+  COMMON_GWAS_CFG="${gwas_cfg}"
+  COMMON_QTL_CFG="${qtl_cfg}"
+  COMMON_OUTPUT_DIR="${output_dir}"
+  COMMON_MANAGED="${managed}"
+  COMMON_PASSTHROUGH=("${passthrough[@]}")
+}
+
+cmd="${1:-help}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+case "${cmd}" in
+  run)
+    parse_common_flags "$@"
+    set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
+    if [[ "${COMMON_MANAGED}" == "true" ]]; then
+      managed_args=()
+      if [[ -n "${COMMON_GLOBAL_CFG}" ]]; then
+        managed_args+=(--global "${COMMON_GLOBAL_CFG}")
+      fi
+      if [[ -n "${COMMON_GWAS_CFG}" ]]; then
+        managed_args+=(--gwas "${COMMON_GWAS_CFG}")
+      fi
+      if [[ -n "${COMMON_QTL_CFG}" ]]; then
+        managed_args+=(--qtl "${COMMON_QTL_CFG}")
+      fi
+      if [[ -n "${COMMON_OUTPUT_DIR}" ]]; then
+        managed_args+=(--output-dir "${COMMON_OUTPUT_DIR}")
+      fi
+      managed_args+=("${COMMON_PASSTHROUGH[@]}")
+      exec "${repo_root}/tools/run_pipeline_managed.sh" "${managed_args[@]}"
+    fi
+    if [[ -n "${COMMON_OUTPUT_DIR}" ]]; then
+      export EASYCOLOC_OUTPUT_DIR="${COMMON_OUTPUT_DIR}"
+    fi
+    exec Rscript run_coloc.r "${COMMON_PASSTHROUGH[@]}"
+    ;;
+  doctor)
+    parse_common_flags "$@"
+    set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
+    exec Rscript tools/doctor_easycoloc.R "${COMMON_PASSTHROUGH[@]}"
+    ;;
+  init)
+    force="false"
+    preset="project"
+    target_dir=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --preset)
+          preset="${2:?missing value for --preset}"
+          shift 2
+          ;;
+        --force)
+          force="true"
+          shift
+          ;;
+        --help|-h)
+          cat <<'EOF'
+Usage: ./easycoloc init TARGET_DIR [--preset project] [--force]
+EOF
+          exit 0
+          ;;
+        *)
+          if [[ -z "${target_dir}" ]]; then
+            target_dir="$1"
+            shift
+          else
+            echo "[INIT] unexpected argument: $1" >&2
+            exit 1
+          fi
+          ;;
+      esac
+    done
+    if [[ "${preset}" != "project" ]]; then
+      echo "[INIT] unsupported preset: ${preset}" >&2
+      exit 1
+    fi
+    if [[ -z "${target_dir}" ]]; then
+      echo "[INIT] TARGET_DIR is required" >&2
+      exit 1
+    fi
+    mkdir -p "${target_dir}"
+    target_dir="$(cd "${target_dir}" && pwd -P)"
+    if [[ -e "${target_dir}" && -n "$(ls -A "${target_dir}" 2>/dev/null)" && "${force}" != "true" ]]; then
+      echo "[INIT] target exists and is not empty: ${target_dir}" >&2
+      echo "[INIT] rerun with --force to overwrite" >&2
+      exit 1
+    fi
+    cp -R "${repo_root}/templates/project/." "${target_dir}/"
+    echo "[INIT] wrote portable project template to ${target_dir}"
+    echo "[INIT] next: edit ${target_dir}/config/*.yaml and run ./easycoloc doctor --global ${target_dir}/config/global.yaml --gwas ${target_dir}/config/gwas.yaml --qtl ${target_dir}/config/qtl.yaml"
+    ;;
+  check)
+    exec Rscript tools/check_run_completion.R "$@"
+    ;;
+  status)
+    exec Rscript tools/summarize_run_status.R "$@"
+    ;;
+  monitor)
+    exec Rscript tools/monitor_easycoloc.R "$@"
+    ;;
+  manifest)
+    exec Rscript tools/build_output_manifest.R "$@"
+    ;;
+  refs)
+    parse_common_flags "$@"
+    set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
+    exec Rscript tools/list_reference_requirements.R "${COMMON_PASSTHROUGH[@]}"
+    ;;
+  bootstrap-refs)
+    parse_common_flags "$@"
+    set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
+    exec Rscript tools/bootstrap_references.R "${COMMON_PASSTHROUGH[@]}"
+    ;;
+  smoke)
+    exec "${repo_root}/tools/run_smoke_checks.sh"
+    ;;
+  demo)
+    exec Rscript examples/minimal/synthetic_plot_demo.R
+    ;;
+  help|-h|--help)
+    show_help
+    ;;
+  *)
+    echo "[CLI] unknown command: ${cmd}" >&2
+    show_help >&2
+    exit 1
+    ;;
+esac

@@ -16,6 +16,85 @@ if (file.exists("src/utils_hash.R")) {
   warning("Hash conversion script not exist!.")
 }
 
+.ld_cache <- new.env(parent = emptyenv())
+.tabix_cache <- new.env(parent = emptyenv())
+
+ld_cache_group_key <- function(bfile, keep_file) {
+  paste(
+    normalizePath(bfile, mustWork = FALSE),
+    if (is.null(keep_file) || !nzchar(keep_file)) "NO_KEEP" else normalizePath(keep_file, mustWork = FALSE),
+    sep = "::"
+  )
+}
+
+ld_cache_entry_key <- function(variants) {
+  paste(sort(unique(as.character(variants))), collapse = "|")
+}
+
+ld_cache_lookup <- function(variants, bfile, keep_file = NULL) {
+  req_snps <- sort(unique(as.character(variants)))
+  if (length(req_snps) == 0) return(NULL)
+  group_key <- ld_cache_group_key(bfile, keep_file)
+  if (!exists(group_key, envir = .ld_cache, inherits = FALSE)) {
+    return(NULL)
+  }
+  group_entries <- get(group_key, envir = .ld_cache, inherits = FALSE)
+  exact_key <- ld_cache_entry_key(req_snps)
+  if (!is.null(group_entries[[exact_key]])) {
+    entry <- group_entries[[exact_key]]
+    return(list(R = entry$R, snp_info = entry$snp_info))
+  }
+
+  candidate_keys <- names(group_entries)
+  if (length(candidate_keys) == 0) return(NULL)
+  best_entry <- NULL
+  best_size <- Inf
+  for (entry_key in candidate_keys) {
+    entry <- group_entries[[entry_key]]
+    if (is.null(entry) || length(entry$snps) < length(req_snps)) next
+    if (all(req_snps %in% entry$snps) && length(entry$snps) < best_size) {
+      best_entry <- entry
+      best_size <- length(entry$snps)
+    }
+  }
+  if (is.null(best_entry)) return(NULL)
+  idx <- match(req_snps, best_entry$snps)
+  snp_info <- best_entry$snp_info[match(req_snps, best_entry$snp_info$SNP), ]
+  list(
+    R = best_entry$R[idx, idx, drop = FALSE],
+    snp_info = snp_info
+  )
+}
+
+ld_cache_store <- function(variants, bfile, keep_file = NULL, ld_res, max_entries = 12L) {
+  if (is.null(ld_res) || is.null(ld_res$R)) return(invisible(FALSE))
+  snps <- sort(unique(as.character(variants)))
+  if (length(snps) == 0) return(invisible(FALSE))
+  group_key <- ld_cache_group_key(bfile, keep_file)
+  group_entries <- if (exists(group_key, envir = .ld_cache, inherits = FALSE)) {
+    get(group_key, envir = .ld_cache, inherits = FALSE)
+  } else {
+    list()
+  }
+  entry_key <- ld_cache_entry_key(snps)
+  group_entries[[entry_key]] <- list(
+    snps = snps,
+    R = ld_res$R,
+    snp_info = ld_res$snp_info,
+    cached_at = Sys.time()
+  )
+  if (length(group_entries) > max_entries) {
+    ord <- order(vapply(group_entries, function(x) as.numeric(x$cached_at), numeric(1)), decreasing = TRUE)
+    group_entries <- group_entries[ord[seq_len(max_entries)]]
+  }
+  assign(group_key, group_entries, envir = .ld_cache)
+  invisible(TRUE)
+}
+
+tabix_cache_key <- function(tabix_file, chrom, start, end) {
+  paste(normalizePath(tabix_file, mustWork = FALSE), as.character(chrom), as.integer(start), as.integer(end), sep = "::")
+}
+
 # =============================================================================
 # APA Gene ID Parser: Handle alternative polyadenylation (APA) transcript format
 # =============================================================================
@@ -875,6 +954,11 @@ query_tabix_region <- function(tabix_file, chrom, start, end, col_names = NULL) 
       warning(glue("Tabix file not found: {tabix_file}"))
       return(NULL)
   }
+  cache_key <- tabix_cache_key(tabix_file, chrom, start, end)
+  if (exists(cache_key, envir = .tabix_cache, inherits = FALSE)) {
+      cached <- get(cache_key, envir = .tabix_cache, inherits = FALSE)
+      return(if (is.null(cached)) NULL else copy(cached))
+  }
   chrom_clean <- gsub("^chr", "", as.character(chrom))
 
   run_query <- function(query_chrom) {
@@ -885,11 +969,58 @@ query_tabix_region <- function(tabix_file, chrom, start, end, col_names = NULL) 
   }
   dt <- run_query(paste0("chr", chrom_clean))
   if (is.null(dt)) dt <- run_query(chrom_clean)
+  assign(cache_key, if (is.null(dt)) NULL else copy(dt), envir = .tabix_cache)
   return(dt)
+}
+
+get_qtl_candidate_phenotypes <- function(meta_row, cfg_qtl, chrom, start, end,
+                                         prefilter_sig_pairs = TRUE,
+                                         verbose = FALSE) {
+    if (!isTRUE(prefilter_sig_pairs)) {
+        return(NULL)
+    }
+    sig_col <- cfg_qtl$qtl_info$columns$sig_filename
+    if (is.null(sig_col) || !sig_col %in% names(meta_row)) {
+        return(NULL)
+    }
+
+    sig_file <- as.character(meta_row[[sig_col]])
+    if (is.na(sig_file) || !nzchar(sig_file) || !file.exists(sig_file)) {
+        return(NULL)
+    }
+
+    sig_raw <- tryCatch(
+        query_tabix_region(sig_file, chrom, start, end),
+        error = function(e) NULL
+    )
+    if (is.null(sig_raw) || nrow(sig_raw) == 0) {
+        return(character(0))
+    }
+
+    if (ncol(sig_raw) == length(cfg_qtl$QTL_all_header)) {
+        colnames(sig_raw) <- cfg_qtl$QTL_all_header
+    }
+
+    pheno_col <- cfg_qtl$QTL_cols$phenotype
+    if (is.null(pheno_col) || !pheno_col %in% names(sig_raw)) {
+        if (isTRUE(verbose)) {
+            message("[QTL] sigPairs phenotype column unavailable; falling back to allPairs query")
+        }
+        return(NULL)
+    }
+
+    phenos <- unique(as.character(sig_raw[[pheno_col]]))
+    phenos <- phenos[!is.na(phenos) & nzchar(phenos)]
+    phenos
 }
 
 get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
     if (length(variants) == 0) return(NULL)
+    variants <- sort(unique(as.character(variants)))
+    cached_res <- ld_cache_lookup(variants, bfile, keep_file = keep_file)
+    if (!is.null(cached_res)) {
+        return(cached_res)
+    }
     fn <- tempfile(); on.exit(unlink(paste0(fn, "*")), add = TRUE)
     tryCatch({
         fwrite(list(variants), file = fn, col.names = FALSE)
@@ -900,7 +1031,9 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
         ld_mat <- as.matrix(fread(paste0(fn, ".ld")))
         bim <- fread(paste0(fn, ".bim"), col.names = c("CHR", "SNP", "CM", "POS", "A1", "A2"))
         colnames(ld_mat) <- bim$SNP; rownames(ld_mat) <- bim$SNP
-        return(list(R = ld_mat, snp_info = bim))
+        ld_res <- list(R = ld_mat, snp_info = bim)
+        ld_cache_store(variants, bfile, keep_file = keep_file, ld_res = ld_res)
+        return(ld_res)
     }, error = function(e) return(NULL))
 }
 

@@ -1,9 +1,10 @@
-output_dir: "./results"
+output_dir: "../apa/04_coloc/results"
 temp_dir: "./temp"
 sig_threshold: 0.8  # Legacy fallback for coloc_settings.pp4_threshold
 use_parallel: true
 n_cores: 2
 random_seed: 20240326  # Global seed for reproducibility (SuSiE, parallel processing)
+plink_hg19: ""
 plink_hg38: "/home/lyc/share_group_folder/ref/1KG/hg38/1kg_hg38_filtered"
 plink_keep: "/home/lyc/share_group_folder/ref/1KG/EAS.sample"
 hash_table_dir: ""
@@ -40,6 +41,13 @@ coloc_settings:
 analysis:
   flank_bp: 500000  # Window size around lead SNP for QTL extraction (500kb)
   plot_window_bp: 200000  # Default plot window if not auto-calculated (200kb)
+  prefilter_sig_pairs: true  # Query sigPairs first to prune non-promising phenotypes before allPairs coloc
+
+runtime:
+  enabled: true
+  resume_completed_tasks: true
+  skip_existing_locus_results: false
+  write_task_events: true
 
 harmonization_settings:
   env_name: "gwaslab"
@@ -64,8 +72,8 @@ sensitivity_analysis:
 plot_settings:
   significance_threshold: 5.0e-8
   plot_window_bp: 200000
-  plot_width: 10 # inches
-  plot_height: 10 # inches (increased for dotplot + genetrack)
+  plot_width: 7.2 # inches, compact publication panel
+  plot_height: 5.4 # inches, compact publication panel
   point_size: 5 # dot size (increased)
   point_alpha: 0.85 # dot transparency
   # Title format: which field from QTL phenotype to show

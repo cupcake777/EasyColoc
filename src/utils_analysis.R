@@ -8,7 +8,7 @@ suppressPackageStartupMessages({
   library(susieR)
 })
 
-get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, maf_default = 0.1, maf_na_replacement = 0.05, maf_epsilon = 1e-6, keep_file = NULL) {
+get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5, gwas_N = NULL, qtl_N = NULL, use_susie = TRUE, susie_threshold = 0.75, plink_bfile = NULL, plink_bin = "plink", p1 = 1e-4, p2 = 1e-4, p12 = 1e-5, maf_default = 0.1, maf_na_replacement = 0.05, maf_epsilon = 1e-6, keep_file = NULL, ld_res = NULL) {
     # ==========================================================================
     # get_clean_maf: Extract or impute minor allele frequencies
     # ==========================================================================
@@ -72,12 +72,14 @@ get_coloc_results <- function(colocInputFile, gwas_type = "cc", gwas_prop = 0.5,
         return(res_abf)
     }
     
-    if (!exists("get_ld_matrix") || is.null(plink_bfile)) { 
+    if (is.null(ld_res) && (!exists("get_ld_matrix") || is.null(plink_bfile))) { 
         warning("LD tools missing. Skipping SuSiE."); 
         return(res_abf) 
     }
-     
-    ld_res <- get_ld_matrix(d1$snp, plink_bfile, plink_bin, keep_file = keep_file)
+
+    if (is.null(ld_res)) {
+        ld_res <- get_ld_matrix(d1$snp, plink_bfile, plink_bin, keep_file = keep_file)
+    }
     
     if (is.null(ld_res) || is.null(ld_res$R)) { 
         warning(glue("LD calculation failed (NULL matrix). Check if SNP IDs (e.g. {d1$snp[1]}) match PLINK reference."))

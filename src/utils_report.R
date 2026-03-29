@@ -17,6 +17,18 @@ suppressPackageStartupMessages({
   library(glue)
 })
 
+report_value <- function(row, primary, fallback = NULL, default = NA_character_) {
+  candidates <- c(primary, fallback)
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
+  candidates <- unique(candidates)
+
+  for (col in candidates) {
+    if (col %in% names(row)) return(row[[col]])
+  }
+
+  default
+}
+
 # =============================================================================
 # generate_html_report: Main report generation function
 # =============================================================================
@@ -100,6 +112,13 @@ merge_results <- function(abf_files) {
 get_summary_stats <- function(results) {
 
   pp4_vals <- results$PP4[!is.na(results$PP4)]
+  gene_labels <- if ("Gene" %in% names(results)) {
+    results$Gene
+  } else if ("Phenotype" %in% names(results)) {
+    results$Phenotype
+  } else {
+    character(0)
+  }
 
   list(
     total_tests = nrow(results),
@@ -111,7 +130,7 @@ get_summary_stats <- function(results) {
     max_pp4 = round(max(pp4_vals, na.rm = TRUE), 4),
     min_pp4 = round(min(pp4_vals, na.rm = TRUE), 4),
     mean_n_snps = round(mean(results$n_snps, na.rm = TRUE), 1),
-    unique_genes = length(unique(results$Gene)),
+    unique_genes = length(unique(gene_labels)),
     unique_loci = length(unique(results$Locus))
   )
 }
@@ -124,7 +143,7 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
   stats <- get_summary_stats(all_results)
 
   # Top results table (by PP4)
-  top_results <- all_results[order(-all_results$PP4), ][1:50, ]
+  top_results <- all_results[order(-all_results$PP4), ][seq_len(min(50, nrow(all_results))), ]
 
   # PP4 values for JSON/plotting
   pp4_vals <- all_results$PP4[!is.na(all_results$PP4)]
@@ -442,7 +461,13 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
     stats$unique_genes,
     # Table rows
     paste(apply(top_results, 1, function(row) {
-      pp4 <- as.numeric(row["PP4"])
+      row_list <- as.list(row)
+      pp4 <- as.numeric(report_value(row_list, "PP4", default = NA_real_))
+      pp3 <- suppressWarnings(as.numeric(report_value(row_list, "PP3", default = NA_real_)))
+      pp0 <- suppressWarnings(as.numeric(report_value(row_list, "PP.H0.abf", default = NA_real_)))
+      n_snps <- suppressWarnings(as.numeric(report_value(row_list, "n_snps", default = NA_real_)))
+      locus <- report_value(row_list, "Locus", default = "")
+      gene_label <- report_value(row_list, "Gene", fallback = "Phenotype", default = "")
       badge_class <- if(pp4 >= 0.8) "pp4-strong" else if(pp4 >= 0.5) "pp4-suggestive" else "pp4-weak"
       sprintf('
           <tr>
@@ -454,13 +479,13 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
             <td>%d</td>
             <td>%s</td>
           </tr>',
-        row["Locus"],
-        row["Gene"],
+        locus,
+        gene_label,
         badge_class,
         pp4,
-        as.numeric(row["PP3"]),
-        as.numeric(row["PP.H0.abf"]),
-        as.numeric(row["n_snps"]),
+        ifelse(is.na(pp3), NaN, pp3),
+        ifelse(is.na(pp0), NaN, pp0),
+        ifelse(is.na(n_snps), 0L, as.integer(round(n_snps))),
         ifelse(pp4 >= 0.8, "Strong", ifelse(pp4 >= 0.5, "Suggestive", "Weak"))
       )
     }), collapse = "\n"),

@@ -21,6 +21,7 @@ sanitize_filename <- function(filename) {
 }
 
 .recomb_cache <- new.env(parent = emptyenv())
+.plink_bim_cache <- new.env(parent = emptyenv())
 
 load_recomb_map <- function(chrom, start, end, recomb_prefix) {
     if (is.null(recomb_prefix)) return(NULL)
@@ -83,4 +84,40 @@ load_recomb_map <- function(chrom, start, end, recomb_prefix) {
     }
     
     return(NULL)
+}
+
+load_plink_bim_index <- function(plink_bfile) {
+    if (is.null(plink_bfile) || !nzchar(plink_bfile)) {
+        return(NULL)
+    }
+    cache_key <- normalizePath(plink_bfile, mustWork = FALSE)
+    if (exists(cache_key, envir = .plink_bim_cache, inherits = FALSE)) {
+        return(get(cache_key, envir = .plink_bim_cache))
+    }
+
+    bim_file <- paste0(plink_bfile, ".bim")
+    if (!file.exists(bim_file)) {
+        warning(glue("PLINK BIM file not found: {bim_file}"))
+        return(NULL)
+    }
+
+    ref_panel <- tryCatch(
+        fread(
+            bim_file,
+            header = FALSE,
+            select = c(1, 2, 4, 5, 6),
+            col.names = c("CHR", "plink_snp_id", "POS", "V5", "V6")
+        ),
+        error = function(e) NULL
+    )
+
+    if (is.null(ref_panel) || nrow(ref_panel) == 0) {
+        warning(glue("Failed to load PLINK BIM index: {bim_file}"))
+        return(NULL)
+    }
+
+    ref_panel[, CHR := gsub("^chr", "", as.character(CHR), ignore.case = TRUE)]
+    ref_panel[, POS := suppressWarnings(as.numeric(POS))]
+    assign(cache_key, ref_panel, envir = .plink_bim_cache)
+    ref_panel
 }
