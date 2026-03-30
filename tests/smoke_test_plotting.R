@@ -10,16 +10,34 @@ source("src/utils_plot.R")
 source("src/utils_output.R")
 
 cfg_global <- yaml::read_yaml("config/global.yaml")
-gtf_path <- if (!is.null(cfg_global$gene_anno) && file.exists(cfg_global$gene_anno)) {
+fixture_dir <- file.path("tests", "fixtures")
+
+resolve_existing_file <- function(paths) {
+  paths <- Filter(function(path) !is.null(path) && nzchar(path), paths)
+  for (path in paths) {
+    if (file.exists(path)) return(path)
+  }
+  NULL
+}
+
+resolve_recomb_prefix <- function(prefixes, chrom = "1") {
+  prefixes <- Filter(function(path) !is.null(path) && nzchar(path), prefixes)
+  for (prefix in prefixes) {
+    txt_path <- paste0(prefix, "_recombination_map_hapmap_format_hg38_chr_", chrom, ".txt")
+    bed_path <- paste0(prefix, "_recombination_map_hg38_chr_", chrom, ".bed")
+    if (file.exists(txt_path) || file.exists(bed_path)) return(prefix)
+  }
+  NULL
+}
+
+gtf_path <- resolve_existing_file(c(
+  file.path(fixture_dir, "annotation", "smoke_hg38_chr1.gtf"),
   cfg_global$gene_anno
-} else {
-  NULL
-}
-recomb_path <- if (!is.null(cfg_global$recom) && file.exists(cfg_global$recom)) {
+))
+recomb_path <- resolve_recomb_prefix(c(
+  file.path(fixture_dir, "recomb", "hg38", "CHB", "CHB"),
   cfg_global$recom
-} else {
-  NULL
-}
+))
 
 make_synthetic_locus <- function() {
   set.seed(20260327)
@@ -59,11 +77,25 @@ make_synthetic_locus <- function() {
   )
 }
 
+make_dense_corner_points <- function() {
+  data.frame(
+    x = c(seq(0.02, 0.24, length.out = 28), seq(0.68, 0.86, length.out = 4)),
+    y = c(seq(0.66, 0.98, length.out = 28), seq(0.12, 0.22, length.out = 4)),
+    is_lead = c(TRUE, rep(FALSE, 31)),
+    is_credible = c(rep(TRUE, 4), rep(FALSE, 28)),
+    stringsAsFactors = FALSE
+  )
+}
+
 assert_true <- function(cond, msg) {
   if (!isTRUE(cond)) stop(msg, call. = FALSE)
 }
 
+assert_true(!is.null(gtf_path), "smoke plotting test requires a resolvable gene annotation fixture")
+assert_true(!is.null(recomb_path), "smoke plotting test requires a resolvable CHB recombination fixture")
+
 example_data <- make_synthetic_locus()
+dense_corner_points <- make_dense_corner_points()
 
 feature_region <- parse_feature_region(example_data$phenotype_info)
 assert_true(!is.null(feature_region), "parse_feature_region() returned NULL")
@@ -84,6 +116,40 @@ assert_true(window_info$chrom_label == "chr1", "resolve_plot_window() chrom labe
 assert_true(isTRUE(window_info$expanded), "resolve_plot_window() should expand to cover phenotype transcript")
 assert_true(window_info$min_pos == 42482663, "resolve_plot_window() expanded min_pos is incorrect")
 assert_true(window_info$max_pos == 43766000, "resolve_plot_window() expanded max_pos is incorrect")
+
+legend_layout <- choose_internal_legend_position(
+  points_df = dense_corner_points,
+  xlim = c(0, 1),
+  ylim = c(0, 1),
+  legend_nrow = 6,
+  legend_labels = c("Lead SNP", "95% CS", "0.8-1.0", "0.6-0.8", "0.4-0.6", "< 0.2"),
+  plot_width = 6.6,
+  plot_height = 4.9
+)
+assert_true(
+  !(legend_layout$position[1] < 0.5 && legend_layout$position[2] > 0.5),
+  "dynamic legend selector should avoid dense top-left corner"
+)
+
+external_legend_right <- choose_external_legend_layout(
+  legend_nrow = 6,
+  plot_width = 6.6,
+  plot_height = 4.9
+)
+assert_true(
+  identical(external_legend_right$position, "right"),
+  "standard locus plot should place legend on the right outside the panel"
+)
+
+external_legend_bottom <- choose_external_legend_layout(
+  legend_nrow = 7,
+  plot_width = 5.2,
+  plot_height = 4.4
+)
+assert_true(
+  identical(external_legend_bottom$position, "bottom"),
+  "narrow plot should place legend at the bottom outside the panel"
+)
 
 assign("lead_SNP", example_data$lead_snp, envir = .GlobalEnv)
 assign("geneSymbol", example_data$phenotype_info, envir = .GlobalEnv)

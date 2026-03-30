@@ -37,6 +37,8 @@ answer three questions quickly:
 ## Conventions
 
 - Prefer synthetic or tiny fixture inputs over external downloads.
+- Keep fixture build/population/version assumptions explicit in the fixture
+  itself or in `tests/fixtures/README.md`.
 - Keep each smoke test focused on one subsystem.
 - Print a short `[SMOKE] ... passed` marker so failures are easy to localize in CI or terminal logs.
 - Avoid writing outside temporary directories unless a test is explicitly exercising project-local behavior.

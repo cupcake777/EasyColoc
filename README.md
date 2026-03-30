@@ -1,5 +1,9 @@
 # EasyColoc
 
+[![smoke-lite](https://github.com/cupcake777/EasyColoc/actions/workflows/smoke-lite.yml/badge.svg)](https://github.com/cupcake777/EasyColoc/actions/workflows/smoke-lite.yml)
+[![License](https://img.shields.io/github/license/cupcake777/EasyColoc)](LICENSE)
+[![Build Support](https://img.shields.io/badge/build-hg19%20%7C%20hg38-1f6feb)](docs/REFERENCE_COMPATIBILITY.md)
+
 EasyColoc is a practical GWAS-to-QTL colocalization pipeline built for real
 inputs rather than idealized examples. It focuses on two recurring pain points:
 
@@ -9,6 +13,17 @@ inputs rather than idealized examples. It focuses on two recurring pain points:
 EasyColoc standardizes GWAS inputs, queries tabix-indexed QTL resources, and
 produces ABF and SuSiE results together with plots, manifests, runtime
 snapshots, and an HTML report.
+
+## Scientific Guardrails
+
+- reference-aware handling of `hg19` and `hg38` GWAS/QTL combinations
+- explicit support for build-matched LD panels, recombination maps, and gene annotations
+- smoke fixtures that preserve coordinate and population compatibility instead of using visually convenient placeholders
+
+Reference matching rules and fixture design notes:
+
+- [docs/REFERENCE_COMPATIBILITY.md](docs/REFERENCE_COMPATIBILITY.md)
+- [tests/fixtures/README.md](tests/fixtures/README.md)
 
 ## At A Glance
 
@@ -102,6 +117,14 @@ flowchart TD
 ```
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a fuller description.
+
+## Example Output
+
+The plotting style below is generated from the repository's synthetic smoke
+fixture with explicit `hg38 chr1` coordinates, `CHB` recombination context, and
+matched gene-track coordinates.
+
+![EasyColoc synthetic locus panel](docs/assets/synthetic_locus_demo.png)
 
 ## Main Commands
 

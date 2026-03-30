@@ -95,6 +95,197 @@ parse_feature_region <- function(label) {
   )
 }
 
+clamp_unit_interval <- function(x) {
+  pmin(pmax(x, 0), 1)
+}
+
+estimate_internal_legend_box <- function(legend_nrow = 1, legend_labels = NULL,
+                                         plot_width = 10, plot_height = 8) {
+  label_chars <- if (!is.null(legend_labels) && length(legend_labels) > 0) {
+    suppressWarnings(max(nchar(as.character(legend_labels)), na.rm = TRUE))
+  } else {
+    8
+  }
+  if (!is.finite(label_chars)) label_chars <- 8
+
+  width_frac <- 0.18 + 0.008 * max(0, label_chars - 6) + 0.01 * max(0, legend_nrow - 5)
+  height_frac <- 0.11 + 0.045 * max(1, legend_nrow)
+
+  if (is.finite(plot_width) && plot_width > 0) {
+    width_frac <- width_frac * (6.8 / plot_width)^0.12
+  }
+  if (is.finite(plot_height) && plot_height > 0) {
+    height_frac <- height_frac * (5.2 / plot_height)^0.10
+  }
+
+  width_frac <- min(0.34, max(0.18, width_frac))
+  height_frac <- min(0.42, max(0.18, height_frac))
+
+  list(
+    width = width_frac,
+    height = height_frac,
+    margin_x = min(0.04, max(0.02, width_frac * 0.16)),
+    margin_y = min(0.04, max(0.02, height_frac * 0.12))
+  )
+}
+
+choose_external_legend_layout <- function(legend_nrow = 1,
+                                          plot_width = 10, plot_height = 8) {
+  use_bottom <- (is.finite(plot_width) && plot_width < 6.2) ||
+    (is.finite(plot_height) && plot_height < 4.8) ||
+    legend_nrow >= 7
+
+  if (use_bottom) {
+    return(list(
+      position = "bottom",
+      justification = "center",
+      direction = "horizontal",
+      guide_ncol = min(3, max(2, ceiling(legend_nrow / 2))),
+      guide_nrow = max(1, ceiling(legend_nrow / min(3, max(2, ceiling(legend_nrow / 2))))),
+      box_margin = margin(t = 3, r = 0, b = 0, l = 0),
+      plot_margin = margin(t = 6, r = 6, b = 4, l = 6, unit = "pt")
+    ))
+  }
+
+  list(
+    position = "right",
+    justification = "center",
+    direction = "vertical",
+    guide_ncol = 1,
+    guide_nrow = legend_nrow,
+    box_margin = margin(t = 0, r = 0, b = 0, l = 4),
+    plot_margin = margin(t = 6, r = 2, b = 2, l = 6, unit = "pt")
+  )
+}
+
+choose_internal_legend_position <- function(points_df, label_df = NULL,
+                                            x_col = "x", y_col = "y",
+                                            xlim = NULL, ylim = NULL,
+                                            legend_nrow = 1, legend_labels = NULL,
+                                            plot_width = 10, plot_height = 8) {
+  default_layout <- list(
+    corner = "top_left",
+    position = c(0.02, 0.98),
+    justification = c(0, 1),
+    score = NA_real_
+  )
+
+  points_df <- safe_df_convert(points_df)
+  if (is.null(points_df) || !all(c(x_col, y_col) %in% names(points_df))) {
+    return(default_layout)
+  }
+
+  x_vals <- safe_numeric(points_df[[x_col]])
+  y_vals <- safe_numeric(points_df[[y_col]])
+  keep <- !is.na(x_vals) & !is.na(y_vals)
+  if (!any(keep)) {
+    return(default_layout)
+  }
+
+  x_vals <- x_vals[keep]
+  y_vals <- y_vals[keep]
+  point_df <- points_df[keep, , drop = FALSE]
+
+  x_limits <- if (!is.null(xlim) && length(xlim) == 2 && all(is.finite(xlim))) {
+    as.numeric(xlim)
+  } else {
+    range(x_vals, na.rm = TRUE)
+  }
+  y_limits <- if (!is.null(ylim) && length(ylim) == 2 && all(is.finite(ylim))) {
+    as.numeric(ylim)
+  } else {
+    range(y_vals, na.rm = TRUE)
+  }
+
+  if (!all(is.finite(x_limits)) || diff(x_limits) <= 0 || !all(is.finite(y_limits)) || diff(y_limits) <= 0) {
+    return(default_layout)
+  }
+
+  x_scaled <- clamp_unit_interval((x_vals - x_limits[1]) / diff(x_limits))
+  y_scaled <- clamp_unit_interval((y_vals - y_limits[1]) / diff(y_limits))
+
+  point_weight <- 1 + 0.65 * y_scaled
+  if ("is_lead" %in% names(point_df)) {
+    point_weight <- point_weight + ifelse(!is.na(point_df$is_lead) & point_df$is_lead, 1.8, 0)
+  }
+  if ("is_credible" %in% names(point_df)) {
+    point_weight <- point_weight + ifelse(!is.na(point_df$is_credible) & point_df$is_credible, 0.9, 0)
+  }
+
+  legend_box <- estimate_internal_legend_box(
+    legend_nrow = legend_nrow,
+    legend_labels = legend_labels,
+    plot_width = plot_width,
+    plot_height = plot_height
+  )
+
+  candidates <- list(
+    list(corner = "top_left", position = c(legend_box$margin_x, 1 - legend_box$margin_y), justification = c(0, 1)),
+    list(corner = "top_right", position = c(1 - legend_box$margin_x, 1 - legend_box$margin_y), justification = c(1, 1)),
+    list(corner = "bottom_right", position = c(1 - legend_box$margin_x, legend_box$margin_y), justification = c(1, 0)),
+    list(corner = "bottom_left", position = c(legend_box$margin_x, legend_box$margin_y), justification = c(0, 0))
+  )
+
+  label_scaled <- NULL
+  if (!is.null(label_df) && is.data.frame(label_df) && all(c("x", "y") %in% names(label_df))) {
+    label_x <- safe_numeric(label_df$x)
+    label_y <- safe_numeric(label_df$y)
+    label_keep <- !is.na(label_x) & !is.na(label_y)
+    if (any(label_keep)) {
+      label_scaled <- data.frame(
+        x = clamp_unit_interval((label_x[label_keep] - x_limits[1]) / diff(x_limits)),
+        y = clamp_unit_interval((label_y[label_keep] - y_limits[1]) / diff(y_limits))
+      )
+    }
+  }
+
+  score_candidate <- function(candidate) {
+    pos_x <- candidate$position[1]
+    pos_y <- candidate$position[2]
+    just_x <- candidate$justification[1]
+    just_y <- candidate$justification[2]
+
+    if (just_x == 0) {
+      x_lo <- pos_x
+      x_hi <- pos_x + legend_box$width
+    } else {
+      x_lo <- pos_x - legend_box$width
+      x_hi <- pos_x
+    }
+
+    if (just_y == 0) {
+      y_lo <- pos_y
+      y_hi <- pos_y + legend_box$height
+    } else {
+      y_lo <- pos_y - legend_box$height
+      y_hi <- pos_y
+    }
+
+    x_lo <- clamp_unit_interval(x_lo)
+    x_hi <- clamp_unit_interval(x_hi)
+    y_lo <- clamp_unit_interval(y_lo)
+    y_hi <- clamp_unit_interval(y_hi)
+
+    point_hit <- x_scaled >= x_lo & x_scaled <= x_hi & y_scaled >= y_lo & y_scaled <= y_hi
+    point_score <- sum(point_weight[point_hit], na.rm = TRUE)
+
+    label_score <- 0
+    if (!is.null(label_scaled) && nrow(label_scaled) > 0) {
+      label_hit <- label_scaled$x >= x_lo & label_scaled$x <= x_hi &
+        label_scaled$y >= y_lo & label_scaled$y <= y_hi
+      label_score <- 4 * sum(label_hit, na.rm = TRUE)
+    }
+
+    point_score + label_score
+  }
+
+  scores <- vapply(candidates, score_candidate, numeric(1))
+  best_idx <- which.min(scores)[1]
+  best_candidate <- candidates[[best_idx]]
+  best_candidate$score <- scores[[best_idx]]
+  best_candidate
+}
+
 resolve_plot_window <- function(leadSNP_DF, pos_col, chr_col,
                                 lead_snp_val = NULL,
                                 plot_window_bp = 200000,
@@ -235,7 +426,8 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
                     show_lead_line = FALSE,
                     colocalized_snp = NULL,
                     credible_set = NULL,
-                    gwas_display_threshold = NULL) {
+                    gwas_display_threshold = NULL,
+                    plot_width = 10, plot_height = 8) {
 
    df <- safe_df_convert(df)
   if (is.null(df)) {
@@ -610,6 +802,13 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
 
   legend_ncol <- 1
   legend_nrow <- length(legend_breaks)
+  ylim <- c(ymin_auto, ceiling(maxlogP * 1.1))
+  legend_layout <- choose_external_legend_layout(
+    legend_nrow = legend_nrow,
+    plot_width = plot_width,
+    plot_height = plot_height
+  )
+  message(glue("[LD_plot] Legend placement selected: {legend_layout$position}"))
   
   p <- p +
     scale_fill_identity(
@@ -621,8 +820,8 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
         override.aes = list(shape = 21, size = 3.1, alpha = 1, stroke = 0.4),
         title.position = "top",
         title.hjust = 0,
-        nrow = legend_nrow,
-        ncol = legend_ncol,
+        nrow = legend_layout$guide_nrow,
+        ncol = legend_layout$guide_ncol,
         byrow = TRUE
       )
     ) +
@@ -637,14 +836,16 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
     ) +
     theme_classic(base_size = 9.2, base_family = "sans") +
     theme(
-      legend.position = c(0.02, 0.98),
-      legend.justification = c(0, 1),
+      legend.position = legend_layout$position,
+      legend.justification = legend_layout$justification,
+      legend.direction = legend_layout$direction,
       legend.title = element_text(size = 7.8, face = "bold"),
       legend.text = element_text(size = 7.1),
       legend.key.size = unit(0.5, "lines"),
       legend.key.height = unit(0.55, "lines"),
       legend.background = element_rect(fill = "#FFFFFFF2", color = "#D8E1EA", linewidth = 0.5),
       legend.margin = margin(t = 4, r = 4, b = 4, l = 4),
+      legend.box.margin = legend_layout$box_margin,
       legend.box.spacing = unit(0, "pt"),
       axis.line = element_blank(),
       axis.line.x = element_blank(),
@@ -657,7 +858,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
       plot.title = element_text(size = 11.5, face = "bold", color = "#12233B", hjust = 0, margin = margin(b = 1)),
       plot.subtitle = element_text(size = 8.1, color = "#4A5A6A", hjust = 0, margin = margin(b = 4)),
       plot.caption = element_text(size = 7.1, color = "#5B6775", hjust = 0, margin = margin(t = 3)),
-      plot.margin = margin(t = 6, r = 6, b = 2, l = 6, unit = "pt"),
+      plot.margin = legend_layout$plot_margin,
       plot.background = element_rect(fill = "white", color = NA),
       panel.background = element_rect(fill = "#FBFCFD", color = NA),
       panel.border = element_rect(fill = NA, color = "#D8E1EA", linewidth = 0.45),
@@ -687,8 +888,7 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   } else {
     p <- p + scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
   }
-  
-  ylim <- c(ymin_auto, ceiling(maxlogP * 1.1))
+
   p <- p + coord_cartesian(ylim = ylim)
 
   return(p)
@@ -1070,7 +1270,9 @@ plot_qtl_association <- function(qtl_all_chrom, qtl_all_pvalue, leadSNP_DF,
             show_lead_line = show_lead_line,
             colocalized_snp = lead_snp_val,
             credible_set = credible_set,
-            gwas_display_threshold = significance_threshold
+            gwas_display_threshold = significance_threshold,
+            plot_width = plot_width,
+            plot_height = plot_height
         )
     }, error = function(e) {
         message(glue("[ERROR] LD plot failed: {e$message}"))

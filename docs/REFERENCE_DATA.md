@@ -1,5 +1,8 @@
 # Reference Data And Speed
 
+For build, population, and annotation-version matching rules, see
+[REFERENCE_COMPATIBILITY.md](REFERENCE_COMPATIBILITY.md).
+
 ## Why This Matters
 
 For EasyColoc, the practical adoption bottlenecks are:

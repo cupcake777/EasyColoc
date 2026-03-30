@@ -8,16 +8,34 @@ utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
 invisible(lapply(utils_files, source))
 
 cfg_global <- yaml::read_yaml("config/global.yaml")
-gtf_path <- if (!is.null(cfg_global$gene_anno) && file.exists(cfg_global$gene_anno)) {
+fixture_dir <- file.path("tests", "fixtures")
+
+resolve_existing_file <- function(paths) {
+  paths <- Filter(function(path) !is.null(path) && nzchar(path), paths)
+  for (path in paths) {
+    if (file.exists(path)) return(path)
+  }
+  NULL
+}
+
+resolve_recomb_prefix <- function(prefixes, chrom = "1") {
+  prefixes <- Filter(function(path) !is.null(path) && nzchar(path), prefixes)
+  for (prefix in prefixes) {
+    txt_path <- paste0(prefix, "_recombination_map_hapmap_format_hg38_chr_", chrom, ".txt")
+    bed_path <- paste0(prefix, "_recombination_map_hg38_chr_", chrom, ".bed")
+    if (file.exists(txt_path) || file.exists(bed_path)) return(prefix)
+  }
+  NULL
+}
+
+gtf_path <- resolve_existing_file(c(
+  file.path(fixture_dir, "annotation", "smoke_hg38_chr1.gtf"),
   cfg_global$gene_anno
-} else {
-  NULL
-}
-recomb_path <- if (!is.null(cfg_global$recom) && file.exists(cfg_global$recom)) {
+))
+recomb_path <- resolve_recomb_prefix(c(
+  file.path(fixture_dir, "recomb", "hg38", "CHB", "CHB"),
   cfg_global$recom
-} else {
-  NULL
-}
+))
 
 make_synthetic_locus <- function() {
   set.seed(20260327)
