@@ -234,6 +234,7 @@ register_active_run(
     parent_pid = suppressWarnings(as.integer(Sys.getenv("EASYCOLOC_PARENT_PID", unset = NA_character_))),
     command = "Rscript run_coloc.r"
 )
+on.exit(clear_active_run(), add = TRUE)
 append_runtime_event(
     stage = "init",
     message_text = "EasyColoc pipeline initialized",
@@ -402,8 +403,17 @@ run_pipeline <- function() {
     } else {
         4L
     }
+    # Forking across QTL tasks interacts poorly with SuSiE, LD extraction and
+    # graphics devices; keep per-locus task execution serial unless explicitly
+    # enabled in runtime settings.
+    parallel_qtl_tasks <- if (!is.null(cfg_global$runtime$parallel_qtl_tasks)) {
+        isTRUE(cfg_global$runtime$parallel_qtl_tasks)
+    } else {
+        FALSE
+    }
     total_gwas <- length(cfg_gwas$datasets)
     message(glue("[INIT] Using {n_cores} CPU cores"))
+    message(glue("[INIT] Per-locus QTL parallelism: {if (parallel_qtl_tasks) 'enabled' else 'disabled'}"))
     write_runtime_heartbeat(
         stage = "pipeline_start",
         message_text = "Main GWAS loop started",
@@ -939,7 +949,7 @@ run_pipeline <- function() {
                     list(records = records, rows = rows)
                 }
 
-                locus_results <- if (n_cores > 1L && nrow(qtl_meta) >= qtl_parallel_min) {
+                locus_results <- if (parallel_qtl_tasks && n_cores > 1L && nrow(qtl_meta) >= qtl_parallel_min) {
                     parallel::mclapply(seq_len(nrow(qtl_meta)), process_qtl_wrapper, mc.cores = n_cores)
                 } else {
                     lapply(seq_len(nrow(qtl_meta)), process_qtl_wrapper)

@@ -6,6 +6,7 @@ cd "${repo_root}"
 
 bash -n easycoloc
 bash -n tools/run_pipeline_managed.sh
+bash -n tools/watch_output_dir.sh
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT

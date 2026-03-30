@@ -3,18 +3,13 @@
 suppressPackageStartupMessages({
   library(data.table)
   library(jsonlite)
-  library(yaml)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
 source("src/utils_config.R")
 
-cfg_bundle <- easycoloc_read_configs()
-output_dir <- normalizePath(cfg_bundle$global$output_dir, mustWork = FALSE)
-
-if (length(args) >= 1 && nzchar(args[1])) {
-  output_dir <- normalizePath(args[1], mustWork = FALSE)
-}
+cfg_bundle <- if (length(args) >= 1 && nzchar(args[1])) NULL else easycoloc_try_read_configs()
+output_dir <- easycoloc_resolve_output_dir_arg(args, cfg_bundle = cfg_bundle, required = TRUE)
 
 if (!dir.exists(output_dir)) {
   stop("Output directory does not exist: ", output_dir, call. = FALSE)

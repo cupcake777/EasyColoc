@@ -164,6 +164,16 @@ register_active_run <- function(log_file = NA_character_,
   invisible(TRUE)
 }
 
+clear_active_run <- function() {
+  if (!runtime_is_enabled()) return(invisible(FALSE))
+
+  active_run_file <- runtime_paths()$active_run
+  if (!is.null(active_run_file) && file.exists(active_run_file)) {
+    unlink(active_run_file)
+  }
+  invisible(TRUE)
+}
+
 append_runtime_event <- function(level = "INFO",
                                  stage,
                                  message_text = NA_character_,

@@ -18,6 +18,7 @@ Commands:
   check      Check whether a run completed successfully
   status     Summarize per-GWAS progress and output counts
   monitor    Print the latest runtime heartbeat and output snapshot
+  watch      Poll an output directory repeatedly and append snapshots to a log
   manifest   Build an output manifest for an existing results directory
   refs       List required and optional reference resources
   bootstrap-refs  Materialize shared references into a project-local layout
@@ -191,6 +192,9 @@ EOF
     ;;
   monitor)
     exec Rscript tools/monitor_easycoloc.R "$@"
+    ;;
+  watch)
+    exec "${repo_root}/tools/watch_output_dir.sh" "$@"
     ;;
   manifest)
     exec Rscript tools/build_output_manifest.R "$@"

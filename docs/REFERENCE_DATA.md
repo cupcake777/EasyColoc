@@ -108,7 +108,7 @@ Additional bootstrap modes:
 
 ## Performance Defaults
 
-EasyColoc now enables this by default in [`config/global.yaml`](/mnt/share_group_folder/work/EasyColoc/config/global.yaml):
+EasyColoc now enables this by default in `config/global.yaml`:
 
 ```yaml
 analysis:

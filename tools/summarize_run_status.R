@@ -2,20 +2,15 @@
 
 suppressPackageStartupMessages({
   library(data.table)
-  library(yaml)
   library(jsonlite)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
 source("src/utils_config.R")
-cfg_bundle <- easycoloc_read_configs()
-cfg_global <- cfg_bundle$global
-cfg_gwas <- cfg_bundle$gwas
+cfg_bundle <- if (length(args) >= 1 && nzchar(args[1])) NULL else easycoloc_try_read_configs()
+cfg_gwas <- if (!is.null(cfg_bundle)) cfg_bundle$gwas else NULL
 
-output_dir <- normalizePath(cfg_global$output_dir, mustWork = FALSE)
-if (length(args) >= 1 && nzchar(args[1])) {
-  output_dir <- normalizePath(args[1], mustWork = FALSE)
-}
+output_dir <- easycoloc_resolve_output_dir_arg(args, cfg_bundle = cfg_bundle, required = TRUE)
 
 timestamped_logs <- if (dir.exists(output_dir)) {
   list.files(output_dir, pattern = "^run_easycoloc_full_[0-9]{8}_[0-9]{4,6}\\.log$", full.names = TRUE)
@@ -45,85 +40,122 @@ if (!is.null(active_run) && !is.null(active_run$log_file) && file.exists(active_
   latest_log <- active_run$log_file
 }
 
-log_lines <- if (!is.null(latest_log) && file.exists(latest_log)) readLines(latest_log, warn = FALSE) else character(0)
-last_started_gwas <- {
-  hits <- grep("^Processing GWAS Dataset:", log_lines, value = TRUE)
-  if (length(hits) > 0) sub("^Processing GWAS Dataset: ", "", tail(hits, 1)) else NA_character_
-}
-
-gwas_ids <- vapply(cfg_gwas$datasets, `[[`, character(1), "id")
-
-count_prefix_files <- function(subdir, pattern_suffix) {
-  dir_path <- file.path(output_dir, subdir)
-  if (!dir.exists(dir_path)) return(setNames(integer(length(gwas_ids)), gwas_ids))
-  files <- list.files(dir_path, full.names = FALSE)
-  setNames(
-    vapply(gwas_ids, function(id) {
-      sum(grepl(paste0("^", id, ".*", pattern_suffix, "$"), files))
-    }, integer(1)),
-    gwas_ids
-  )
-}
-
-abf_counts <- count_prefix_files("abf", "_locus_results\\.csv")
-rds_counts <- count_prefix_files("rds", "\\.rds")
-plot_counts <- count_prefix_files("plots", "\\.(pdf|png)")
-susie_counts <- count_prefix_files("susie", "_susie\\.csv")
-
-summary_dt <- data.table(
-  gwas_id = gwas_ids,
-  abf = as.integer(abf_counts[gwas_ids]),
-  rds = as.integer(rds_counts[gwas_ids]),
-  plots = as.integer(plot_counts[gwas_ids]),
-  susie = as.integer(susie_counts[gwas_ids])
-)
-summary_dt[, started := gwas_id %in% gsub("^.*: ", "", grep("^Processing GWAS Dataset:", log_lines, value = TRUE))]
-summary_dt[, current := !is.na(last_started_gwas) & gwas_id == last_started_gwas]
-
 task_status_dt <- if (file.exists(task_state_file)) {
   tryCatch(as.data.table(fread(task_state_file)), error = function(e) data.table())
 } else {
   data.table()
 }
 
+log_lines <- if (!is.null(latest_log) && file.exists(latest_log)) readLines(latest_log, warn = FALSE) else character(0)
+last_started_gwas <- {
+  hits <- grep("^Processing GWAS Dataset:", log_lines, value = TRUE)
+  if (length(hits) > 0) sub("^Processing GWAS Dataset: ", "", tail(hits, 1)) else NA_character_
+}
+
+infer_gwas_ids <- function(cfg_gwas = NULL, task_status_dt = data.table(), log_lines = character(0)) {
+  ids <- character(0)
+
+  if (!is.null(cfg_gwas$datasets) && length(cfg_gwas$datasets) > 0) {
+    ids <- c(ids, vapply(cfg_gwas$datasets, `[[`, character(1), "id"))
+  }
+
+  if (nrow(task_status_dt) > 0 && "gwas_id" %in% names(task_status_dt)) {
+    ids <- c(ids, as.character(task_status_dt$gwas_id))
+  }
+
+  if (length(log_lines) > 0) {
+    ids <- c(ids, sub("^Processing GWAS Dataset: ", "", grep("^Processing GWAS Dataset:", log_lines, value = TRUE)))
+  }
+
+  ids <- unique(ids[!is.na(ids) & nzchar(ids)])
+  sort(ids)
+}
+
+count_files_for_ids <- function(subdir, pattern_suffix, gwas_ids) {
+  dir_path <- file.path(output_dir, subdir)
+  if (!dir.exists(dir_path) || length(gwas_ids) == 0) {
+    return(setNames(integer(length(gwas_ids)), gwas_ids))
+  }
+
+  files <- list.files(dir_path, full.names = FALSE)
+  setNames(
+    vapply(gwas_ids, function(id) {
+      escaped_id <- easycoloc_regex_escape(id)
+      sum(grepl(paste0("^", escaped_id, ".*", pattern_suffix, "$"), files))
+    }, integer(1)),
+    gwas_ids
+  )
+}
+
+gwas_ids <- infer_gwas_ids(cfg_gwas = cfg_gwas, task_status_dt = task_status_dt, log_lines = log_lines)
+
+if (length(gwas_ids) > 0) {
+  abf_counts <- count_files_for_ids("abf", "_locus_results\\.csv", gwas_ids)
+  rds_counts <- count_files_for_ids("rds", "\\.rds", gwas_ids)
+  plot_counts <- count_files_for_ids("plots", "\\.(pdf|png)", gwas_ids)
+  susie_counts <- count_files_for_ids("susie", "_susie\\.csv", gwas_ids)
+
+  summary_dt <- data.table(
+    gwas_id = gwas_ids,
+    abf = as.integer(abf_counts[gwas_ids]),
+    rds = as.integer(rds_counts[gwas_ids]),
+    plots = as.integer(plot_counts[gwas_ids]),
+    susie = as.integer(susie_counts[gwas_ids])
+  )
+  summary_dt[, started := gwas_id %in% gsub("^.*: ", "", grep("^Processing GWAS Dataset:", log_lines, value = TRUE))]
+  summary_dt[, current := !is.na(last_started_gwas) & gwas_id == last_started_gwas]
+} else {
+  summary_dt <- data.table(
+    gwas_id = character(),
+    abf = integer(),
+    rds = integer(),
+    plots = integer(),
+    susie = integer(),
+    started = logical(),
+    current = logical()
+  )
+}
+
 txt_file <- file.path(output_dir, "run_status_summary.txt")
 json_file <- file.path(output_dir, "run_status_summary.json")
 
-writeLines(
-  c(
-    paste0("output_dir: ", output_dir),
-    paste0("latest_log: ", ifelse(is.null(latest_log), "NA", latest_log)),
-    paste0("last_started_gwas: ", ifelse(is.na(last_started_gwas), "NA", last_started_gwas)),
-    paste0("active_run_pid: ", ifelse(is.null(active_run$pid), "NA", active_run$pid)),
-    paste0("heartbeat_stage: ", ifelse(is.null(heartbeat$stage), "NA", heartbeat$stage)),
-    paste0("heartbeat_time: ", ifelse(is.null(heartbeat$timestamp), "NA", heartbeat$timestamp)),
-    "",
-    capture.output(print(summary_dt)),
-    "",
-    if (nrow(task_status_dt) > 0) {
-      c("task_status_counts:", capture.output(print(task_status_dt[, .N, by = status][order(status)])))
-    } else {
-      "task_status_counts: none"
-    }
-  ),
-  txt_file
+status_text <- c(
+  paste0("output_dir: ", output_dir),
+  paste0("latest_log: ", ifelse(is.null(latest_log), "NA", latest_log)),
+  paste0("last_started_gwas: ", ifelse(is.na(last_started_gwas), "NA", last_started_gwas)),
+  paste0("active_run_pid: ", ifelse(is.null(active_run$pid), "NA", active_run$pid)),
+  paste0("heartbeat_stage: ", ifelse(is.null(heartbeat$stage), "NA", heartbeat$stage)),
+  paste0("heartbeat_time: ", ifelse(is.null(heartbeat$timestamp), "NA", heartbeat$timestamp)),
+  "",
+  capture.output(print(summary_dt)),
+  "",
+  if (nrow(task_status_dt) > 0) {
+    c("task_status_counts:", capture.output(print(task_status_dt[, .N, by = status][order(status)])))
+  } else {
+    "task_status_counts: none"
+  }
 )
 
-write_json(
-  list(
-    output_dir = output_dir,
-    latest_log = latest_log,
-    last_started_gwas = last_started_gwas,
-    active_run = active_run,
-    heartbeat = heartbeat,
-    summary = summary_dt,
-    task_status_counts = if (nrow(task_status_dt) > 0) task_status_dt[, .N, by = status][order(status)] else data.table()
-  ),
-  json_file,
-  pretty = TRUE,
-  auto_unbox = TRUE
+status_payload <- list(
+  output_dir = output_dir,
+  latest_log = latest_log,
+  last_started_gwas = last_started_gwas,
+  active_run = active_run,
+  heartbeat = heartbeat,
+  summary = summary_dt,
+  task_status_counts = if (nrow(task_status_dt) > 0) task_status_dt[, .N, by = status][order(status)] else data.table()
 )
 
-cat("[STATUS] wrote:", txt_file, "\n")
-cat("[STATUS] wrote:", json_file, "\n")
+if (easycoloc_is_writable_dir(output_dir)) {
+  writeLines(status_text, txt_file)
+  write_json(status_payload, json_file, pretty = TRUE, auto_unbox = TRUE)
+  cat("[STATUS] wrote:", txt_file, "\n")
+  cat("[STATUS] wrote:", json_file, "\n")
+} else {
+  cat("[STATUS] skipped writing summary files because output_dir is not writable\n")
+}
+
+if (nrow(summary_dt) == 0) {
+  cat("[STATUS] no GWAS identifiers inferred from config, runtime state, or logs\n")
+}
 print(summary_dt)

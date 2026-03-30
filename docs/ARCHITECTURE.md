@@ -12,22 +12,25 @@ possible. The pipeline is therefore organized around four stages:
 
 ## Pipeline Overview
 
-```text
-GWAS input
-  -> harmonization
-  -> locus discovery
-  -> QTL regional query
-  -> variant matching
-  -> ABF coloc
-  -> SuSiE coloc
-  -> summaries + plots + report
+```mermaid
+flowchart LR
+    A[GWAS Input] --> B[Harmonization]
+    B --> C[Locus Discovery]
+    C --> D[QTL Regional Query]
+    D --> E[Variant Matching]
+    E --> F[ABF Coloc]
+    F --> G[SuSiE Coloc]
+    G --> H[Summaries]
+    G --> I[Plots]
+    G --> J[RDS Bundles]
+    G --> K[HTML Report]
 ```
 
 ## Main Components
 
 ### 1. Harmonization
 
-- Implemented in [run_coloc.r](/mnt/share_group_folder/work/EasyColoc/run_coloc.r) and [utils_format.R](/mnt/share_group_folder/work/EasyColoc/src/utils_format.R)
+- Implemented in `run_coloc.r` and `src/utils_format.R`
 - Uses `gwaslab` when reference assets are available
 - Supports fallback handling for liftOver-related failure paths
 - Keeps build-aware reference selection explicit
@@ -52,7 +55,8 @@ EasyColoc uses a three-tier match strategy:
 2. rsID rescue through dbSNP hash tables
 3. position + allele matching
 
-This is the core bridge between messy GWAS inputs and consortium QTL formats.
+This layer is the bridge between inconsistent GWAS inputs and consortium-style
+QTL files.
 
 ### 5. Coloc Engine
 
@@ -62,13 +66,15 @@ This is the core bridge between messy GWAS inputs and consortium QTL formats.
 
 ### 6. Output Layer
 
-- merged CSV summaries
-- SuSiE tables
-- locus plots
-- serialized RDS bundles
-- runtime tracker files
-- HTML report
-- output manifest
+| Output type | Purpose |
+| --- | --- |
+| merged CSV summaries | downstream analysis and filtering |
+| SuSiE tables | fine-mapping review |
+| locus plots | visual interpretation and handoff |
+| serialized RDS bundles | rerendering and debugging |
+| runtime tracker files | monitoring and auditing |
+| HTML report | compact review artifact |
+| output manifest | machine-readable output inventory |
 
 ## Bootstrap Layer
 
@@ -80,9 +86,9 @@ Bootstrap functionality is a first-class part of the architecture:
 
 These paths live primarily in:
 
-- [bootstrap_references.R](/mnt/share_group_folder/work/EasyColoc/tools/bootstrap_references.R)
-- [utils_bootstrap.R](/mnt/share_group_folder/work/EasyColoc/src/utils_bootstrap.R)
-- [utils_download.R](/mnt/share_group_folder/work/EasyColoc/src/utils_download.R)
+- `tools/bootstrap_references.R`
+- `src/utils_bootstrap.R`
+- `src/utils_download.R`
 
 ## Runtime And Observability
 

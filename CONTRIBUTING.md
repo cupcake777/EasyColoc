@@ -27,3 +27,4 @@ If the local environment is fully configured, also run:
 - Every new entrypoint should have at least a parse or smoke-level check
 - Documentation changes should match actual command behavior
 - Do not hard-code lab-specific absolute paths into reusable examples
+- Keep `config/*.yaml` portable; machine-specific paths belong in `config/local/` or an external project

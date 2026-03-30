@@ -9,6 +9,16 @@ utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
 invisible(lapply(utils_files, source))
 
 cfg_global <- yaml::read_yaml("config/global.yaml")
+gtf_path <- if (!is.null(cfg_global$gene_anno) && file.exists(cfg_global$gene_anno)) {
+  cfg_global$gene_anno
+} else {
+  NULL
+}
+recomb_path <- if (!is.null(cfg_global$recom) && file.exists(cfg_global$recom)) {
+  cfg_global$recom
+} else {
+  NULL
+}
 
 make_synthetic_locus <- function() {
   set.seed(20260327)
@@ -84,9 +94,9 @@ plot_obj <- plot_qtl_association(
   qtl_all_pvalue = "P.qtl",
   leadSNP_DF = example_data$merged_data,
   ld_df = NULL,
-  gtf_path = cfg_global$gene_anno,
+  gtf_path = gtf_path,
   region_recomb = NULL,
-  recomb_path = cfg_global$recom,
+  recomb_path = recomb_path,
   show_lead_line = FALSE,
   qtl_type = example_data$qtl_type,
   phenotype_info = example_data$phenotype_info,

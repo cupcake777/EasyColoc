@@ -1,14 +1,25 @@
 # EasyColoc
 
-EasyColoc is a coloc pipeline for the two problems that slow most real GWAS to
-QTL analyses down:
+EasyColoc is a practical GWAS-to-QTL colocalization pipeline built for real
+inputs rather than idealized examples. It focuses on two recurring pain points:
 
-1. Most public GWAS summary statistics still arrive in messy `hg19`-era formats.
-2. Many coloc workflows stop at `coloc.abf` and never produce `SuSiE` results.
+1. Public GWAS summary statistics often arrive in inconsistent `hg19`-era formats.
+2. Many coloc workflows stop at `coloc.abf` and never carry signal-level follow-up through `SuSiE`.
 
-EasyColoc standardizes GWAS inputs, matches them to tabix-indexed QTL data, and
-returns both ABF and SuSiE coloc outputs with plots, manifests, and an HTML
-report.
+EasyColoc standardizes GWAS inputs, queries tabix-indexed QTL resources, and
+produces ABF and SuSiE results together with plots, manifests, runtime
+snapshots, and an HTML report.
+
+## At A Glance
+
+| If you want to... | Run this |
+| --- | --- |
+| confirm the repo works locally | `./easycoloc smoke` |
+| create the recommended local environment | `micromamba create -f environment.yml` |
+| inspect required references and tools | `./easycoloc refs` and `./easycoloc doctor` |
+| create a self-contained demo | `./easycoloc bootstrap-refs --demo ./demo_quickstart --run` |
+| run the full pipeline with managed logging | `./easycoloc run --managed` |
+| monitor an existing results directory | `./easycoloc status`, `./easycoloc monitor`, `./easycoloc watch` |
 
 ## Why EasyColoc
 
@@ -21,7 +32,17 @@ report.
 
 ## 2-Minute Quickstart
 
-### 1. Self-contained demo
+### 1. Validate the installation
+
+```bash
+micromamba create -f environment.yml
+micromamba activate easycoloc
+./easycoloc refs
+./easycoloc doctor
+./easycoloc smoke
+```
+
+### 2. Create a self-contained demo
 
 ```bash
 ./easycoloc bootstrap-refs --demo ./demo_quickstart --run
@@ -32,13 +53,6 @@ This creates a tiny chr22 project, runs the pipeline end to end, and writes:
 - `results/coloc_report.html`
 - `results/all_colocalization_results.csv`
 - `results/all_susie_results.csv`
-
-### 2. Inspect requirements
-
-```bash
-./easycoloc refs
-./easycoloc doctor
-```
 
 ### 3. Build a real reference panel
 
@@ -58,6 +72,17 @@ This creates a tiny chr22 project, runs the pipeline end to end, and writes:
 
 This downloads the GTEx sample attributes file, builds summary CSVs, and
 generates `qtl_gtex_generated.yaml`.
+
+## Typical Workflow
+
+```text
+validate environment
+  -> bootstrap or point to references
+  -> configure GWAS and QTL metadata
+  -> run coloc
+  -> inspect progress
+  -> review merged results and report
+```
 
 ## Architecture
 
@@ -80,23 +105,25 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a fuller description.
 
 ## Main Commands
 
-```bash
-./easycoloc run --managed
-./easycoloc check /path/to/output_dir
-./easycoloc status /path/to/output_dir
-./easycoloc monitor /path/to/output_dir
-./easycoloc manifest /path/to/output_dir
-./easycoloc refs --include-qtl-files
-./easycoloc bootstrap-refs config/reference_sources.template.yaml --rewrite-config
-./easycoloc smoke
-```
+| Command | Use it for |
+| --- | --- |
+| `./easycoloc run --managed` | Full pipeline run with managed logging and completion checks |
+| `./easycoloc check /path/to/output_dir` | Determine whether a run finished cleanly |
+| `./easycoloc status /path/to/output_dir` | Summarize per-GWAS progress and output counts |
+| `./easycoloc monitor /path/to/output_dir` | Print the latest runtime heartbeat and output snapshot |
+| `./easycoloc watch /path/to/output_dir 60 logs/monitor/my_run.log` | Append periodic monitor snapshots to a local log |
+| `./easycoloc manifest /path/to/output_dir` | Build an output manifest for an existing results directory |
+| `./easycoloc refs --include-qtl-files` | Inspect required and optional references |
+| `./easycoloc bootstrap-refs ...` | Materialize local references or demo assets |
+| `./easycoloc smoke` | Run the standard local smoke suite |
 
 ## Repository Layout
 
 - `src/`: core R modules
 - `tools/`: executable helper scripts
 - `tests/`: smoke and regression tests
-- `config/`: default configs and QTL metadata tables
+- `config/`: portable public defaults plus generated examples
+- `data/`: optional local input staging area for ad hoc runs
 - `docs/`: user-facing documentation
 - `examples/`: minimal demos
 - `templates/`: `easycoloc init` scaffold
@@ -105,13 +132,15 @@ Detailed layout notes are in [REPO_LAYOUT.md](docs/REPO_LAYOUT.md).
 
 ## Key Outputs
 
-- `all_colocalization_results.csv`: merged locus-level coloc results
-- `significant_colocalizations_PP4_*.csv`: thresholded hits
-- `all_susie_results.csv`: merged SuSiE output
-- `plots/*.pdf|png`: locus plots
-- `rds/*.rds`: serialized locus bundles
-- `coloc_report.html`: interactive report
-- `output_manifest.tsv`: machine-readable output inventory
+| Output | Meaning |
+| --- | --- |
+| `all_colocalization_results.csv` | merged locus-level ABF coloc results |
+| `significant_colocalizations_PP4_*.csv` | thresholded coloc hits |
+| `all_susie_results.csv` | merged SuSiE output |
+| `plots/*.pdf|png` | locus plots |
+| `rds/*.rds` | serialized locus bundles for rerendering or inspection |
+| `coloc_report.html` | interactive report |
+| `output_manifest.tsv` | machine-readable output inventory |
 
 ## Documentation
 
@@ -133,4 +162,16 @@ For a lighter parse-only check:
 
 ```bash
 Rscript tests/check_parse.R
+```
+
+For a test inventory and per-file coverage notes, see
+[tests/README.md](tests/README.md).
+
+For config layering and local-private override guidance, see
+[config/README.md](config/README.md).
+
+To monitor an existing results directory without writing into that directory:
+
+```bash
+./easycoloc watch /path/to/output_dir 60
 ```

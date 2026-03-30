@@ -1,6 +1,8 @@
 # Tutorial
 
-This guide walks from a toy demo to a real analysis setup.
+This guide moves from a toy demo to a real analysis setup. Use it when you want
+the shortest path from "the repo clones correctly" to "I have a monitored coloc
+run with interpretable outputs."
 
 ## 1. Environment Setup
 
@@ -28,6 +30,8 @@ Recommended first checks:
 ### Optional quick validation
 
 ```bash
+micromamba create -f environment.yml
+micromamba activate easycoloc
 ./easycoloc smoke
 ```
 
@@ -47,6 +51,15 @@ After it finishes, inspect:
 
 This is the fastest way to confirm that your local EasyColoc installation,
 `plink`, `bgzip`, and `tabix` are working together.
+
+## 3. Choose Your Starting Mode
+
+| Situation | Best next step |
+| --- | --- |
+| You only want to validate the repo | Run `./easycoloc smoke` |
+| You need a portable starter project | Run `./easycoloc init <dir>` |
+| You already have reference assets | Edit the portable defaults in `config/*.yaml` or create private overrides in `config/local/` |
+| You need local 1KG or GTEx support files | Use `bootstrap-refs` as shown below |
 
 ## 3. Build A Real 1000 Genomes Reference
 
@@ -101,42 +114,18 @@ Use the generated YAML as a starting point for GTEx-based analyses.
 
 ## 5. Prepare Your Configs
 
-The minimum files to check are:
+The minimum files to review are:
 
 - `config/global.yaml`
 - `config/gwas.yaml`
 - `config/qtl.yaml`
+- `config/README.md`
 
-### `config/global.yaml`
-
-This is where you define:
-
-- output and temp directories
-- build-aware PLINK references: `plink_hg19`, `plink_hg38`
-- `plink_keep`
-- FASTA / dbSNP / 1KG AF resources
-- coloc thresholds
-- plotting and runtime behavior
-
-### `config/gwas.yaml`
-
-This defines one or more GWAS datasets:
-
-- input path
-- build
-- population
-- trait type
-- sample size / case fraction
-- column mapping
-
-### `config/qtl.yaml`
-
-This defines:
-
-- QTL build
-- QTL summary CSV
-- which columns point to `allPairs` and `sigPairs`
-- QTL field mapping for downstream parsing
+| File | Main responsibility |
+| --- | --- |
+| `config/global.yaml` | output paths, references, coloc thresholds, plotting, runtime behavior |
+| `config/gwas.yaml` | GWAS datasets, build, population, trait type, sample size, column mapping |
+| `config/qtl.yaml` | QTL build, metadata table, allPairs/sigPairs columns, downstream field mapping |
 
 Common fields to confirm:
 
@@ -153,9 +142,12 @@ Run:
 ./easycoloc doctor
 ```
 
+If you do not want to commit machine-specific paths, put private copies in
+`config/local/` and pass them with `--global`, `--gwas`, and `--qtl`.
+
 ## 6. Full Pipeline Run
 
-For normal work, prefer the managed wrapper:
+For routine work, prefer the managed wrapper:
 
 ```bash
 ./easycoloc run --managed
@@ -186,16 +178,21 @@ During or after the run:
 ```bash
 ./easycoloc status /path/to/output_dir
 ./easycoloc monitor /path/to/output_dir
+./easycoloc watch /path/to/output_dir 60 logs/monitor/current_run.log
 ./easycoloc check /path/to/output_dir
 ./easycoloc manifest /path/to/output_dir
 ```
 
-Main result files:
+`watch` is useful when the results directory is outside the current project
+tree or should remain read-only during auditing. It writes snapshots to a local
+log file instead of mutating the target output directory.
 
-- `all_colocalization_results.csv`
-- `significant_colocalizations_PP4_*.csv`
-- `all_susie_results.csv`
-- `coloc_report.html`
+| File | Why you care |
+| --- | --- |
+| `all_colocalization_results.csv` | complete merged coloc table |
+| `significant_colocalizations_PP4_*.csv` | thresholded candidate hits |
+| `all_susie_results.csv` | merged fine-mapping output |
+| `coloc_report.html` | quick visual review for handoff or audit |
 
 ## 8. Regenerate Plots Without Re-running Coloc
 
@@ -210,23 +207,8 @@ pipeline.
 
 ## 9. Common Failure Modes
 
-### `plink` missing
-
-Bootstrap and 1KG setup require `plink` in `$PATH`. EasyColoc now fails with an
-explicit install hint when it is missing.
-
-### QTL files present but no output
-
-Check that:
-
-- `qtl_info.file` points to the correct summary CSV
-- `allPairsTabixFilename` and `sigPairsTabixFilename` resolve correctly
-- `sigPairs` are not filtering everything unexpectedly at the locus of interest
-
-### Build mismatch
-
-Make sure the QTL build matches the PLINK reference build selected in
-`config/global.yaml`:
-
-- `plink_hg19` for `qtl_info.build: hg19`
-- `plink_hg38` for `qtl_info.build: hg38`
+| Symptom | What to check |
+| --- | --- |
+| `plink` missing | Ensure `plink` is on `$PATH`; bootstrap and clumping require it |
+| QTL files present but no output | Confirm `qtl_info.file`, `allPairsTabixFilename`, and `sigPairsTabixFilename`, and verify `sigPairs` is not filtering every locus |
+| Build mismatch | Match `qtl_info.build: hg19` to `plink_hg19`, and `qtl_info.build: hg38` to `plink_hg38` |

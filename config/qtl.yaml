@@ -1,35 +1,19 @@
-# ========
-# qtl.yaml
-# ========
-# QTL data configuration for colocalization analysis
-
 qtl_info:
-  # QTL data build version (hg19 or hg38) - required for coordinate matching
   build: "hg38"
-  # Path to QTL metadata CSV (must contain columns below)
   file: "config/QTL_summary.csv"
-  # Column mapping in metadata CSV
   columns:
-    # Unique QTL dataset identifier (e.g., "eQTL", "pQTL")
     id: "Type"
-    # Sample size for this QTL dataset
     sample_size: "NumberRNASeqandGTSamples"
-    # Filename column for ALL variant-phenotype pairs
-    all_filename: "allPairsTabixFilename"  # All variant-phenotype pairs (nominal p-values)
-    sig_filename: "sigPairsTabixFilename"  # Permutation-significant phenotypes (gatekeeper filter)
+    all_filename: "allPairsTabixFilename"
+    sig_filename: "sigPairsTabixFilename"
 
-# ==========================================
-# QTL Tabix File Format Configuration
-# ==========================================
-
-# Column header names in the Tabix files
 QTL_all_header:
   - "chr"
   - "pos"
   - "ref"
   - "alt"
-  - "phenotype_id"  # APA event ID (e.g., ENST00000303660.8|ZEB2|chr2:144389317-144390028|-)
-  - "variant_id"    # Variant identifier (e.g., chr2:144000166:C:T)
+  - "phenotype_id"
+  - "variant_id"
   - "start_distance"
   - "end_distance"
   - "af"
@@ -40,7 +24,7 @@ QTL_all_header:
   - "slope_se"
 
 QTL_cols:
-  phenotype: "phenotype_id"  # APA event ID (e.g., ENST00000304952.11|HES4|chr1:998964-999432|-)
+  phenotype: "phenotype_id"
   chrom: "chr"
   pos: "pos"
   pval: "pval_nominal"

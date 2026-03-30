@@ -10,6 +10,8 @@ results/
 reference_bootstrap_manifest.tsv
 reference_bootstrap_manifest.json
 examples/minimal/output/
+config/local/*
+!config/local/README.md
 
 # PLINK intermediate files
 *.log

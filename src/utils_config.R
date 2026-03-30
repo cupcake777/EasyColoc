@@ -128,3 +128,43 @@ easycoloc_read_configs <- function() {
     qtl = easycoloc_resolve_qtl_paths(cfg_qtl, project_root)
   )
 }
+
+easycoloc_try_read_configs <- function() {
+  tryCatch(
+    easycoloc_read_configs(),
+    error = function(e) NULL
+  )
+}
+
+easycoloc_resolve_output_dir_arg <- function(args = character(),
+                                             arg_index = 1L,
+                                             cfg_bundle = NULL,
+                                             required = FALSE) {
+  if (length(args) >= arg_index && nzchar(args[[arg_index]])) {
+    return(normalizePath(path.expand(args[[arg_index]]), mustWork = FALSE))
+  }
+
+  if (is.null(cfg_bundle)) {
+    cfg_bundle <- easycoloc_try_read_configs()
+  }
+
+  if (!is.null(cfg_bundle) &&
+      !is.null(cfg_bundle$global$output_dir) &&
+      nzchar(cfg_bundle$global$output_dir)) {
+    return(normalizePath(cfg_bundle$global$output_dir, mustWork = FALSE))
+  }
+
+  if (isTRUE(required)) {
+    stop("Output directory must be provided explicitly or resolvable from config/global.yaml", call. = FALSE)
+  }
+
+  NA_character_
+}
+
+easycoloc_is_writable_dir <- function(path) {
+  dir.exists(path) && file.access(path, 2) == 0
+}
+
+easycoloc_regex_escape <- function(x) {
+  gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
+}
