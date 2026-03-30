@@ -4,8 +4,8 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
-utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
-invisible(lapply(utils_files, source))
+source("src/utils_format.R")
+source("src/utils_report.R")
 
 assert_true <- function(cond, msg) {
   if (!isTRUE(cond)) stop(msg, call. = FALSE)

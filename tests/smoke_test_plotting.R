@@ -5,8 +5,9 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
-invisible(lapply(utils_files, source))
+source("src/utils_helpers.R")
+source("src/utils_plot.R")
+source("src/utils_output.R")
 
 cfg_global <- yaml::read_yaml("config/global.yaml")
 gtf_path <- if (!is.null(cfg_global$gene_anno) && file.exists(cfg_global$gene_anno)) {
