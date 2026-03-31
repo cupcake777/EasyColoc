@@ -50,10 +50,13 @@ status <- system2(
 payload_path <- file.path(tmp_dir, "report_web", "report-data.json")
 assert_true(file.exists(payload_path), "report-data.json was not created")
 
-payload <- read_json(payload_path, simplifyVector = TRUE)
+payload <- read_json(payload_path, simplifyVector = FALSE)
 assert_true(identical(payload$summary$total_tests, 1L), "summary$total_tests mismatch")
+assert_true(is.null(names(payload$results)), "results must be an array, not a named object")
 assert_true(length(payload$results) == 1L, "results length mismatch")
+assert_true(is.null(names(payload$assets$plots)), "assets$plots must be an array")
 assert_true(length(payload$assets$plots) == 1L, "plot index mismatch")
+assert_true(is.null(names(payload$assets$downloads)), "assets$downloads must be an array")
 assert_true(identical(payload$runtime$heartbeat$stage, "pipeline_complete"), "heartbeat stage mismatch")
 
 cat("[SMOKE] report-web data smoke test passed\n")

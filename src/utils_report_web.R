@@ -38,26 +38,27 @@ normalize_report_results <- function(results_dt) {
     )
   }
 
-  names(out) <- sprintf("row_%04d", seq_along(out))
   out
 }
 
 index_report_assets <- function(results_dir) {
   plot_dir <- file.path(results_dir, "plots")
   plot_files <- if (dir.exists(plot_dir)) list.files(plot_dir, full.names = FALSE) else character(0)
-  plots <- as.list(file.path("plots", plot_files))
-  names(plots) <- plot_files
-
-  downloads <- list(
-    all_colocalization_results = list(
-      rel_path = "all_colocalization_results.csv",
-      exists = file.exists(file.path(results_dir, "all_colocalization_results.csv"))
-    ),
-    all_susie_results = list(
-      rel_path = "all_susie_results.csv",
-      exists = file.exists(file.path(results_dir, "all_susie_results.csv"))
+  plots <- lapply(plot_files, function(name) {
+    list(
+      name = name,
+      rel_path = file.path("plots", name)
     )
-  )
+  })
+
+  known_downloads <- c("all_colocalization_results.csv", "all_susie_results.csv")
+  existing_downloads <- known_downloads[file.exists(file.path(results_dir, known_downloads))]
+  downloads <- lapply(existing_downloads, function(name) {
+    list(
+      name = name,
+      rel_path = name
+    )
+  })
 
   list(
     plots = plots,
