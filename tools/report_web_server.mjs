@@ -13,7 +13,7 @@ function readFlag(flag, fallback = null) {
 }
 
 const host = readFlag("--host", "127.0.0.1");
-const port = Number.parseInt(readFlag("--port", "3000"), 10);
+const rawPort = readFlag("--port", "3000");
 const dataFile = readFlag("--data-file");
 const distDir = readFlag("--dist-dir");
 
@@ -22,8 +22,14 @@ if (!dataFile || !distDir) {
   process.exit(1);
 }
 
-if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-  console.error(`[REPORT-WEB] invalid --port value: ${readFlag("--port", "3000")}`);
+if (!/^(0|[1-9][0-9]{0,4})$/.test(rawPort)) {
+  console.error(`[REPORT-WEB] invalid --port value: ${rawPort}`);
+  process.exit(1);
+}
+
+const port = Number.parseInt(rawPort, 10);
+if (port < 0 || port > 65535) {
+  console.error(`[REPORT-WEB] invalid --port value: ${rawPort}`);
   process.exit(1);
 }
 
@@ -73,5 +79,15 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`[REPORT-WEB] url: http://${host}:${port}`);
+  const addr = server.address();
+  if (!addr || typeof addr === "string") {
+    console.log(`[REPORT-WEB] url: http://${host}:${port}`);
+    return;
+  }
+  console.log(`[REPORT-WEB] url: http://${host}:${addr.port}`);
+});
+
+server.on("error", (err) => {
+  console.error(`[REPORT-WEB] server error: ${err.message}`);
+  process.exit(1);
 });

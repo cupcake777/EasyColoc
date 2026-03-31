@@ -10,6 +10,8 @@ Usage: ./easycoloc report-web RESULTS_DIR [--host HOST] [--port PORT] [--project
 EOF
 }
 
+expected_report_version="report-web-v1"
+
 host="127.0.0.1"
 port="3000"
 project_name=""
@@ -80,7 +82,30 @@ if [[ ! -f "${repo_root}/web/dist/index.html" ]]; then
 fi
 
 data_file="${results_dir}/report_web/report-data.json"
+report_data_matches_expected_version() {
+  local file_path="$1"
+  local expected_version="$2"
+  node -e '
+const fs = require("node:fs");
+const [filePath, expectedVersion] = process.argv.slice(1);
+try {
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  process.exit(parsed?.meta?.report_version === expectedVersion ? 0 : 1);
+} catch (_) {
+  process.exit(1);
+}
+' "${file_path}" "${expected_version}"
+}
+
+rebuild_data="false"
 if [[ "${refresh_data}" == "true" || ! -f "${data_file}" ]]; then
+  rebuild_data="true"
+elif ! report_data_matches_expected_version "${data_file}" "${expected_report_version}"; then
+  echo "[REPORT-WEB] report-data.json version mismatch or invalid; rebuilding payload"
+  rebuild_data="true"
+fi
+
+if [[ "${rebuild_data}" == "true" ]]; then
   build_args=(tools/build_report_web_data.R --results-dir "${results_dir}")
   if [[ -n "${project_name}" ]]; then
     build_args+=(--project-name "${project_name}")

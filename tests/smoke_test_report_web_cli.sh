@@ -13,17 +13,46 @@ GWAS_ID,QTL_ID,Locus,Phenotype,PP4,n_snps
 GWAS_A,postnatal,rs100,GENE1,0.92,41
 CSV
 
-./easycoloc report-web "${tmp_dir}/results" --host 127.0.0.1 --port 43123 --no-open >"${tmp_dir}/report.log" 2>&1 &
+./easycoloc report-web "${tmp_dir}/results" --host 127.0.0.1 --port 0 --no-open >"${tmp_dir}/report.log" 2>&1 &
 server_pid=$!
 
-for _ in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:43123/api/report-data" >/dev/null 2>&1; then
+server_url=""
+for _ in $(seq 1 15); do
+  if ! kill -0 "${server_pid}" 2>/dev/null; then
+    cat "${tmp_dir}/report.log" >&2 || true
+    echo "[SMOKE] report-web server exited early" >&2
+    exit 1
+  fi
+
+  if grep '\[REPORT-WEB\] url:' "${tmp_dir}/report.log" >/dev/null 2>&1; then
+    server_url="$(sed -n 's/.*\[REPORT-WEB\] url: \(http:\/\/[^[:space:]]*\).*/\1/p' "${tmp_dir}/report.log" | tail -n 1)"
+    if [[ -n "${server_url}" ]]; then
+      break
+    fi
+  fi
+  sleep 1
+done
+
+if [[ -z "${server_url}" ]]; then
+  cat "${tmp_dir}/report.log" >&2 || true
+  echo "[SMOKE] failed to capture server url" >&2
+  exit 1
+fi
+
+for _ in $(seq 1 15); do
+  if ! kill -0 "${server_pid}" 2>/dev/null; then
+    cat "${tmp_dir}/report.log" >&2 || true
+    echo "[SMOKE] report-web server exited before API became reachable" >&2
+    exit 1
+  fi
+  if curl -fsS "${server_url}/api/report-data" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 
-curl -fsS "http://127.0.0.1:43123/api/report-data" | grep '"project_name"' >/dev/null
+curl -fsS "${server_url}/api/report-data" | grep '"project_name"' >/dev/null
+curl -fsS "${server_url}/does-not-exist" | grep -i "<!doctype html>" >/dev/null
 grep '\[REPORT-WEB\] url:' "${tmp_dir}/report.log" >/dev/null
 
 echo "[SMOKE] report-web cli smoke test passed"
