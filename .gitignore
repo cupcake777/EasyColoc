@@ -46,3 +46,5 @@ Thumbs.db
 *.swp
 *.swo
 *~
+web/node_modules/
+web/dist/
