@@ -22,4 +22,7 @@ test -f "${tmp_dir}/project/config/qtl.yaml"
   --gwas "${tmp_dir}/project/config/gwas.yaml" \
   --qtl "${tmp_dir}/project/config/qtl.yaml" >/dev/null
 
+./easycoloc help | grep "report-web" >/dev/null
+./easycoloc report-web --help >/dev/null
+
 echo "[SMOKE] cli smoke test passed"

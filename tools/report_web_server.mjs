@@ -1,0 +1,77 @@
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+
+const argv = process.argv.slice(2);
+
+function readFlag(flag, fallback = null) {
+  const idx = argv.indexOf(flag);
+  if (idx < 0 || idx + 1 >= argv.length) {
+    return fallback;
+  }
+  return argv[idx + 1];
+}
+
+const host = readFlag("--host", "127.0.0.1");
+const port = Number.parseInt(readFlag("--port", "3000"), 10);
+const dataFile = readFlag("--data-file");
+const distDir = readFlag("--dist-dir");
+
+if (!dataFile || !distDir) {
+  console.error("Usage: node tools/report_web_server.mjs --data-file FILE --dist-dir DIR [--host HOST] [--port PORT]");
+  process.exit(1);
+}
+
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+  console.error(`[REPORT-WEB] invalid --port value: ${readFlag("--port", "3000")}`);
+  process.exit(1);
+}
+
+const resolvedDistDir = path.resolve(distDir);
+const resolvedDataFile = path.resolve(dataFile);
+
+if (!fs.existsSync(resolvedDataFile)) {
+  console.error(`[REPORT-WEB] report data file not found: ${resolvedDataFile}`);
+  process.exit(1);
+}
+if (!fs.existsSync(resolvedDistDir) || !fs.statSync(resolvedDistDir).isDirectory()) {
+  console.error(`[REPORT-WEB] web dist directory not found: ${resolvedDistDir}`);
+  process.exit(1);
+}
+
+const contentType = (filePath) => {
+  if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
+  if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
+  if (filePath.endsWith(".svg")) return "image/svg+xml";
+  if (filePath.endsWith(".png")) return "image/png";
+  return "text/html; charset=utf-8";
+};
+
+const serveFile = (res, filePath) => {
+  res.writeHead(200, { "Content-Type": contentType(filePath) });
+  fs.createReadStream(filePath).pipe(res);
+};
+
+const server = http.createServer((req, res) => {
+  const rawPath = (req.url || "/").split("?")[0];
+  if (rawPath === "/api/report-data") {
+    serveFile(res, resolvedDataFile);
+    return;
+  }
+
+  const normalizedPath = path.normalize(rawPath).replace(/^(\.\.[/\\])+/, "");
+  const requestPath = normalizedPath === "/" ? "/index.html" : normalizedPath;
+  const candidate = path.join(resolvedDistDir, requestPath);
+
+  if (candidate.startsWith(resolvedDistDir) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+    serveFile(res, candidate);
+    return;
+  }
+
+  serveFile(res, path.join(resolvedDistDir, "index.html"));
+});
+
+server.listen(port, host, () => {
+  console.log(`[REPORT-WEB] url: http://${host}:${port}`);
+});
