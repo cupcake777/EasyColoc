@@ -1,10 +1,20 @@
 # Tutorial
 
-This guide moves from a toy demo to a real analysis setup. Use it when you want
-the shortest path from "the repo clones correctly" to "I have a monitored coloc
-run with interpretable outputs."
+This guide is organized by common usage scenarios so you can jump directly to
+the path you need.
 
-## 1. Environment Setup
+## Scenario 1. Open An Existing Results Directory
+
+If you already have a completed `results/` directory from EasyColoc, start here:
+
+```bash
+./easycoloc report-web /path/to/results
+```
+
+This command prepares report payload data and starts a local report server for
+interactive browsing.
+
+## Scenario 2. First-Time Environment Setup
 
 ### Required tools
 
@@ -35,7 +45,7 @@ micromamba activate easycoloc
 ./easycoloc smoke
 ```
 
-## 2. Demo In Under Two Minutes
+## Scenario 3. Demo In Under Two Minutes
 
 Create a fully self-contained project and run it immediately:
 
@@ -52,7 +62,7 @@ After it finishes, inspect:
 This is the fastest way to confirm that your local EasyColoc installation,
 `plink`, `bgzip`, and `tabix` are working together.
 
-## 3. Choose Your Starting Mode
+## Scenario 4. Choose Your Starting Mode
 
 | Situation | Best next step |
 | --- | --- |
@@ -61,7 +71,7 @@ This is the fastest way to confirm that your local EasyColoc installation,
 | You already have reference assets | Edit the portable defaults in `config/*.yaml` or create private overrides in `config/local/` |
 | You need local 1KG or GTEx support files | Use `bootstrap-refs` as shown below |
 
-## 3. Build A Real 1000 Genomes Reference
+## Scenario 5. Build A Real 1000 Genomes Reference
 
 ### hg19 example
 
@@ -92,7 +102,7 @@ What this does:
 If you want EasyColoc to wire the resulting panel into your config automatically,
 run the same command with `--rewrite-config` and pass your config paths.
 
-## 4. Prepare GTEx Metadata
+## Scenario 6. Prepare GTEx Metadata
 
 If you already have local GTEx QTL files:
 
@@ -112,7 +122,7 @@ This writes:
 
 Use the generated YAML as a starting point for GTEx-based analyses.
 
-## 5. Prepare Your Configs
+## Scenario 7. Prepare Your Configs
 
 The minimum files to review are:
 
@@ -145,7 +155,7 @@ Run:
 If you do not want to commit machine-specific paths, put private copies in
 `config/local/` and pass them with `--global`, `--gwas`, and `--qtl`.
 
-## 6. Full Pipeline Run
+## Scenario 8. Full Pipeline Run
 
 For routine work, prefer the managed wrapper:
 
@@ -171,7 +181,7 @@ What happens during the run:
 5. ABF coloc runs first; SuSiE follows when signal and LD support it.
 6. Plots, RDS bundles, merged summaries, and an HTML report are written.
 
-## 7. Inspect Progress And Results
+## Scenario 9. Inspect Progress And Results
 
 During or after the run:
 
@@ -194,7 +204,7 @@ log file instead of mutating the target output directory.
 | `all_susie_results.csv` | merged fine-mapping output |
 | `coloc_report.html` | quick visual review for handoff or audit |
 
-## 8. Regenerate Plots Without Re-running Coloc
+## Scenario 10. Regenerate Plots Without Re-running Coloc
 
 If RDS bundles already exist:
 
@@ -205,7 +215,7 @@ Rscript tools/rerun_plots.R
 This regenerates locus plots from saved RDS objects without rerunning the whole
 pipeline.
 
-## 9. Common Failure Modes
+## Scenario 11. Common Failure Modes
 
 | Symptom | What to check |
 | --- | --- |

@@ -14,6 +14,14 @@ EasyColoc standardizes GWAS inputs, queries tabix-indexed QTL resources, and
 produces ABF and SuSiE results together with plots, manifests, runtime
 snapshots, and an HTML report.
 
+## Fast Start For Existing Results
+
+If you already have a finished `results/` directory, open the local web report with:
+
+```bash
+./easycoloc report-web /path/to/results
+```
+
 ## Scientific Guardrails
 
 - reference-aware handling of `hg19` and `hg38` GWAS/QTL combinations
@@ -29,6 +37,7 @@ Reference matching rules and fixture design notes:
 
 | If you want to... | Run this |
 | --- | --- |
+| open an existing results directory in the local web report | `./easycoloc report-web /path/to/results` |
 | confirm the repo works locally | `./easycoloc smoke` |
 | create the recommended local environment | `micromamba create -f environment.yml` |
 | inspect required references and tools | `./easycoloc refs` and `./easycoloc doctor` |
@@ -171,7 +180,6 @@ Detailed layout notes are in [REPO_LAYOUT.md](docs/REPO_LAYOUT.md).
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [REFERENCE_DATA.md](docs/REFERENCE_DATA.md)
 - [DOCKER.md](docs/DOCKER.md)
-- [COMPETITIVE_POSITIONING.md](docs/COMPETITIVE_POSITIONING.md)
 
 ## Validation
 

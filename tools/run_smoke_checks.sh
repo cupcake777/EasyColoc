@@ -23,7 +23,9 @@ run_step "Running toy demo bootstrap smoke test" Rscript tests/smoke_test_bootst
 run_step "Running 1KG setup smoke test" Rscript tests/smoke_test_1kg_setup.R
 run_step "Running GTEx bootstrap smoke test" Rscript tests/smoke_test_gtex_bootstrap.R
 run_step "Running LD cache smoke test" Rscript tests/smoke_test_ld_cache.R
+run_step "Running report web data smoke test" Rscript tests/smoke_test_report_web_data.R
 run_step "Running CLI smoke test" bash tests/smoke_test_cli.sh
+run_step "Running report web CLI smoke test" bash tests/smoke_test_report_web_cli.sh
 run_step "Running minimal synthetic demo" Rscript examples/minimal/synthetic_plot_demo.R
 
 echo "[CHECK] All smoke checks passed"

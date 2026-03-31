@@ -24,6 +24,10 @@ flowchart LR
     G --> I[Plots]
     G --> J[RDS Bundles]
     G --> K[HTML Report]
+    H --> L[Report Web Payload]
+    I --> L
+    J --> L
+    L --> M[Local Report Web Server]
 ```
 
 ## Main Components
@@ -101,6 +105,32 @@ EasyColoc tracks long runs explicitly:
 - `monitor_snapshot.json`
 
 This keeps the pipeline inspectable without scraping unstable console output.
+
+## Report Web Layer
+
+The report web path is a lightweight layer on top of finished outputs so users
+can inspect existing result directories without rerunning colocalization.
+
+### 1. Adapter
+
+- CLI command: `./easycoloc report-web /path/to/results`
+- Entrypoint scripts: `tools/build_report_web_data.R`, `tools/start_report_web.sh`
+- Role: validate output directory shape and map EasyColoc outputs into web-ready inputs
+
+### 2. Payload
+
+- Generated artifact: `report_web_data.json` under the target results directory
+- Role: normalized payload for the frontend, built from summary tables and report assets
+
+### 3. Local Server
+
+- Server script: `tools/report_web_server.mjs`
+- Role: serve static web assets and payload locally for interactive browsing
+
+### 4. CLI Wiring
+
+- User-facing entrypoint: `easycoloc` dispatcher (`report-web` subcommand)
+- Role: run payload generation first, then launch local server with the selected results directory
 
 ## What Is Deliberately Not In Scope
 
