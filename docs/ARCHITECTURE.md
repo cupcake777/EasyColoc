@@ -119,7 +119,8 @@ can inspect existing result directories without rerunning colocalization.
 
 ### 2. Payload
 
-- Generated artifact: `report_web_data.json` under the target results directory
+- Generated artifact: `report_web/report-data.json` under the target results directory
+- Location: inside the `report_web/` subdirectory of the selected results directory
 - Role: normalized payload for the frontend, built from summary tables and report assets
 
 ### 3. Local Server
