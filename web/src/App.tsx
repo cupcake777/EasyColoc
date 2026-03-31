@@ -8,6 +8,7 @@ import {
   formatHeartbeatMessage,
   formatHeartbeatStage,
   formatPp4,
+  normalizeReportPayload,
   rowKey,
   topHits
 } from "./lib/report";
@@ -30,7 +31,7 @@ export default function App() {
           throw new Error(`HTTP ${response.status}`);
         }
 
-        const data = (await response.json()) as ReportPayload;
+        const data = normalizeReportPayload(await response.json());
         if (!cancelled) {
           setPayload(data);
           setSelected(data.results[0] ?? null);
