@@ -192,15 +192,18 @@ Run the standard local validation suite:
 ./easycoloc smoke
 ```
 
-Most smoke checks should pass in a normal local environment. The report web CLI
-smoke step starts a localhost server and may require additional local network
-permission in restricted sandboxes.
+This now runs `tests/smoke_test_report_web_cli.sh`, which launches the report web CLI via
+localhost sockets. Sandboxes that cannot bind/connect to localhost will see this step fail.
 
-For a lighter parse-only check:
+If you lack socket/localhost access, run the lighter subset below instead:
 
 ```bash
 Rscript tests/check_parse.R
+bash tests/smoke_test_cli.sh
+Rscript tests/smoke_test_report_web_data.R
 ```
+
+Those cover the parse-only and CLI-focused checks without touching localhost sockets.
 
 For a test inventory and per-file coverage notes, see
 [tests/README.md](tests/README.md).

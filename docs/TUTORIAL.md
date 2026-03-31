@@ -50,6 +50,8 @@ micromamba activate easycoloc
 Most smoke checks run in standard local setups. The report web CLI smoke step
 starts a localhost server and may require additional local network permission
 in restricted sandboxes.
+This now includes `tests/smoke_test_report_web_cli.sh`, so you must be able to bind
+and connect to localhost/socket ports or the smoke step will fail.
 
 ## Scenario 3. Demo In Under Two Minutes
 
