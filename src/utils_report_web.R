@@ -3,7 +3,26 @@ suppressPackageStartupMessages({
   library(jsonlite)
 })
 
-source("src/utils_report.R")
+resolve_current_script_dir <- function() {
+  frame_files <- vapply(
+    sys.frames(),
+    function(env) {
+      ofile <- env$ofile
+      if (is.null(ofile)) "" else as.character(ofile)
+    },
+    character(1)
+  )
+  frame_files <- frame_files[nzchar(frame_files)]
+
+  if (length(frame_files) == 0) {
+    return(getwd())
+  }
+
+  dirname(normalizePath(frame_files[[length(frame_files)]], mustWork = FALSE))
+}
+
+utils_report_web_dir <- resolve_current_script_dir()
+source(file.path(utils_report_web_dir, "utils_report.R"))
 
 read_json_if_present <- function(path) {
   if (!file.exists(path)) {
@@ -11,7 +30,7 @@ read_json_if_present <- function(path) {
   }
 
   parsed <- tryCatch(
-    read_json(path, simplifyVector = TRUE),
+    read_json(path, simplifyVector = FALSE),
     error = function(e) list(invalid_json = TRUE, path = basename(path), error = e$message)
   )
   parsed
@@ -51,9 +70,12 @@ index_report_assets <- function(results_dir) {
     )
   })
 
-  known_downloads <- c("all_colocalization_results.csv", "all_susie_results.csv")
-  existing_downloads <- known_downloads[file.exists(file.path(results_dir, known_downloads))]
-  downloads <- lapply(existing_downloads, function(name) {
+  top_level_entries <- list.files(results_dir, full.names = FALSE, recursive = FALSE)
+  top_level_files <- top_level_entries[!dir.exists(file.path(results_dir, top_level_entries))]
+  download_candidates <- top_level_files[grepl("\\.(csv|tsv|txt|json)$", top_level_files, ignore.case = TRUE)]
+  download_files <- sort(setdiff(download_candidates, c("heartbeat.json", "monitor_snapshot.json")))
+
+  downloads <- lapply(download_files, function(name) {
     list(
       name = name,
       rel_path = name

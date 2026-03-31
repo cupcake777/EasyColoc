@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
+script_args <- commandArgs(trailingOnly = FALSE)
 
 read_flag <- function(flag) {
   idx <- match(flag, args)
@@ -20,7 +21,15 @@ if (is.null(results_dir) || !nzchar(results_dir)) {
   )
 }
 
-source("src/utils_report_web.R")
+file_arg <- script_args[grepl("^--file=", script_args)]
+if (length(file_arg) == 0) {
+  stop("Unable to resolve script path from commandArgs()", call. = FALSE)
+}
+script_path <- sub("^--file=", "", file_arg[[1]])
+script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
+repo_root <- normalizePath(file.path(script_dir, ".."), mustWork = TRUE)
+
+source(file.path(repo_root, "src", "utils_report_web.R"))
 
 out_file <- write_report_web_payload(
   results_dir = results_dir,
