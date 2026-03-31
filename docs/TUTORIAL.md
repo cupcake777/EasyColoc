@@ -13,6 +13,8 @@ If you already have a completed `results/` directory from EasyColoc, start here:
 
 This command prepares report payload data and starts a local report server for
 interactive browsing.
+It generates or refreshes `report_web/report-data.json` under the target
+results directory before launching the server.
 
 ## Scenario 2. First-Time Environment Setup
 
@@ -45,6 +47,10 @@ micromamba activate easycoloc
 ./easycoloc smoke
 ```
 
+Most smoke checks run in standard local setups. The report web CLI smoke step
+starts a localhost server and may require additional local network permission
+in restricted sandboxes.
+
 ## Scenario 3. Demo In Under Two Minutes
 
 Create a fully self-contained project and run it immediately:
@@ -66,7 +72,7 @@ This is the fastest way to confirm that your local EasyColoc installation,
 
 | Situation | Best next step |
 | --- | --- |
-| You only want to validate the repo | Run `./easycoloc smoke` |
+| You only want to validate the repo | Run `./easycoloc smoke` (note: report web CLI smoke may need localhost permission in restricted sandboxes) |
 | You need a portable starter project | Run `./easycoloc init <dir>` |
 | You already have reference assets | Edit the portable defaults in `config/*.yaml` or create private overrides in `config/local/` |
 | You need local 1KG or GTEx support files | Use `bootstrap-refs` as shown below |

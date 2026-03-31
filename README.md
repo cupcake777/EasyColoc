@@ -22,6 +22,9 @@ If you already have a finished `results/` directory, open the local web report w
 ./easycoloc report-web /path/to/results
 ```
 
+This command generates or refreshes `report_web/report-data.json` under the
+target results directory, then starts a local report web server.
+
 ## Scientific Guardrails
 
 - reference-aware handling of `hg19` and `hg38` GWAS/QTL combinations
@@ -188,6 +191,10 @@ Run the standard local validation suite:
 ```bash
 ./easycoloc smoke
 ```
+
+Most smoke checks should pass in a normal local environment. The report web CLI
+smoke step starts a localhost server and may require additional local network
+permission in restricted sandboxes.
 
 For a lighter parse-only check:
 
