@@ -1,6 +1,8 @@
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
+  library(data.table)
+  library(jsonlite)
   library(yaml)
 })
 
@@ -42,9 +44,50 @@ if (!is.null(latest_log) && file.exists(latest_log)) {
   log_lines <- readLines(latest_log, warn = FALSE)
 }
 
+runtime_dir <- file.path(output_dir, "runtime")
+heartbeat_file <- file.path(runtime_dir, "heartbeat.json")
+task_state_file <- file.path(runtime_dir, "task_state.tsv")
+event_log_file <- file.path(runtime_dir, "event_log.ndjson")
+
+read_json_safely <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  tryCatch(read_json(path, simplifyVector = TRUE), error = function(e) NULL)
+}
+
+read_ndjson_safely <- function(path) {
+  if (!file.exists(path)) return(data.table())
+  lines <- readLines(path, warn = FALSE)
+  lines <- lines[nzchar(lines)]
+  if (length(lines) == 0) return(data.table())
+
+  parsed <- lapply(lines, function(line) {
+    tryCatch(as.list(fromJSON(line)), error = function(e) NULL)
+  })
+  parsed <- Filter(Negate(is.null), parsed)
+  if (length(parsed) == 0) return(data.table())
+  rbindlist(parsed, fill = TRUE)
+}
+
+heartbeat <- read_json_safely(heartbeat_file)
+task_state_dt <- if (file.exists(task_state_file)) {
+  tryCatch(as.data.table(fread(task_state_file)), error = function(e) data.table())
+} else {
+  data.table()
+}
+event_log_dt <- read_ndjson_safely(event_log_file)
+
 has_complete_marker <- any(grepl("EasyColoc Analysis Complete!", log_lines, fixed = TRUE))
 has_summary_marker <- any(grepl("[SUM] Merge complete!", log_lines, fixed = TRUE))
 has_report_marker <- any(grepl("[REPORT] Interactive report saved:", log_lines, fixed = TRUE))
+has_failed_tasks <- nrow(task_state_dt) > 0 &&
+  "status" %in% names(task_state_dt) &&
+  any(task_state_dt$status %in% c("failed"), na.rm = TRUE)
+has_runtime_failures <- nrow(event_log_dt) > 0 &&
+  "stage" %in% names(event_log_dt) &&
+  any(event_log_dt$stage %in% c("gwas_failed", "summary_failed", "report_failed"), na.rm = TRUE)
+heartbeat_failed <- !is.null(heartbeat) &&
+  !is.null(heartbeat$stage) &&
+  heartbeat$stage %in% c("pipeline_failed", "summary_failed", "report_failed")
 
 abf_count <- if (dir.exists(file.path(output_dir, "abf"))) {
   length(list.files(file.path(output_dir, "abf"), pattern = "_locus_results\\.csv$", full.names = TRUE))
@@ -65,7 +108,9 @@ susie_count <- if (dir.exists(file.path(output_dir, "susie"))) {
 manifest_file <- file.path(output_dir, "output_manifest.tsv")
 manifest_summary_file <- file.path(output_dir, "output_manifest_summary.json")
 
-status <- if (has_complete_marker && has_summary_marker && has_report_marker) {
+status <- if (has_failed_tasks || has_runtime_failures || heartbeat_failed) {
+  "FAILED"
+} else if (has_complete_marker && has_summary_marker && has_report_marker) {
   "COMPLETE"
 } else if (length(log_lines) > 0) {
   "INCOMPLETE"
@@ -79,6 +124,9 @@ cat("[CHECK] latest_log:", ifelse(is.null(latest_log), "NA", latest_log), "\n")
 cat("[CHECK] abf:", abf_count, "rds:", rds_count, "plots:", plot_count, "susie:", susie_count, "\n")
 cat("[CHECK] manifest:", ifelse(file.exists(manifest_file), manifest_file, "missing"), "\n")
 cat("[CHECK] manifest_summary:", ifelse(file.exists(manifest_summary_file), manifest_summary_file, "missing"), "\n")
+cat("[CHECK] heartbeat_stage:", ifelse(is.null(heartbeat$stage), "NA", heartbeat$stage), "\n")
+cat("[CHECK] runtime_failures:", has_runtime_failures, "\n")
+cat("[CHECK] failed_tasks:", has_failed_tasks, "\n")
 
 if (length(log_lines) > 0) {
   cat("[CHECK] last_log_line:", tail(log_lines, 1), "\n")

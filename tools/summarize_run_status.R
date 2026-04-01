@@ -28,10 +28,25 @@ runtime_dir <- file.path(output_dir, "runtime")
 active_run_file <- file.path(runtime_dir, "active_run.json")
 heartbeat_file <- file.path(runtime_dir, "heartbeat.json")
 task_state_file <- file.path(runtime_dir, "task_state.tsv")
+event_log_file <- file.path(runtime_dir, "event_log.ndjson")
 
 read_json_safely <- function(path) {
   if (!file.exists(path)) return(NULL)
   tryCatch(read_json(path, simplifyVector = TRUE), error = function(e) NULL)
+}
+
+read_ndjson_safely <- function(path) {
+  if (!file.exists(path)) return(data.table())
+  lines <- readLines(path, warn = FALSE)
+  lines <- lines[nzchar(lines)]
+  if (length(lines) == 0) return(data.table())
+
+  parsed <- lapply(lines, function(line) {
+    tryCatch(as.list(fromJSON(line)), error = function(e) NULL)
+  })
+  parsed <- Filter(Negate(is.null), parsed)
+  if (length(parsed) == 0) return(data.table())
+  rbindlist(parsed, fill = TRUE)
 }
 
 active_run <- read_json_safely(active_run_file)
@@ -45,6 +60,8 @@ task_status_dt <- if (file.exists(task_state_file)) {
 } else {
   data.table()
 }
+
+runtime_event_dt <- read_ndjson_safely(event_log_file)
 
 log_lines <- if (!is.null(latest_log) && file.exists(latest_log)) readLines(latest_log, warn = FALSE) else character(0)
 last_started_gwas <- {
@@ -103,7 +120,10 @@ if (length(gwas_ids) > 0) {
     susie = as.integer(susie_counts[gwas_ids])
   )
   summary_dt[, started := gwas_id %in% gsub("^.*: ", "", grep("^Processing GWAS Dataset:", log_lines, value = TRUE))]
-  summary_dt[, current := !is.na(last_started_gwas) & gwas_id == last_started_gwas]
+  is_terminal_heartbeat <- !is.null(heartbeat) &&
+    !is.null(heartbeat$stage) &&
+    heartbeat$stage %in% c("pipeline_complete", "pipeline_failed", "summary_failed", "report_failed")
+  summary_dt[, current := !is_terminal_heartbeat & !is.na(last_started_gwas) & gwas_id == last_started_gwas]
 } else {
   summary_dt <- data.table(
     gwas_id = character(),
@@ -143,7 +163,12 @@ status_payload <- list(
   active_run = active_run,
   heartbeat = heartbeat,
   summary = summary_dt,
-  task_status_counts = if (nrow(task_status_dt) > 0) task_status_dt[, .N, by = status][order(status)] else data.table()
+  task_status_counts = if (nrow(task_status_dt) > 0) task_status_dt[, .N, by = status][order(status)] else data.table(),
+  runtime_event_counts = if (nrow(runtime_event_dt) > 0 && "stage" %in% names(runtime_event_dt)) {
+    runtime_event_dt[, .N, by = stage][order(stage)]
+  } else {
+    data.table()
+  }
 )
 
 if (easycoloc_is_writable_dir(output_dir)) {

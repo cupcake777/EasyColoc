@@ -106,5 +106,77 @@ if (is.null(check_status)) {
 assert_true(check_status == 1L, "completion check should report incomplete status for smoke output")
 assert_true(any(grepl("\\[CHECK\\] status: INCOMPLETE", check_out)), "completion check output missing status")
 
+tmp_complete_dir <- tempfile(pattern = "easycoloc_output_tools_complete_")
+dir.create(tmp_complete_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(tmp_complete_dir, "abf"), showWarnings = FALSE)
+
+complete_log_file <- file.path(tmp_complete_dir, "run_easycoloc_full_20990101_010101.log")
+writeLines(
+  c(
+    "Processing GWAS Dataset: DONE_GWAS",
+    "[SUM] Merge complete!",
+    "[REPORT] Interactive report saved: done_report.html",
+    "EasyColoc Analysis Complete!"
+  ),
+  complete_log_file
+)
+
+initialize_runtime_tracker(tmp_complete_dir, enabled = TRUE, config_fingerprint = "smoke_fp_complete")
+register_active_run(log_file = complete_log_file, run_label = "output_tools_complete")
+write_runtime_heartbeat(stage = "pipeline_complete", message_text = "pipeline finished")
+append_runtime_event(
+  level = "ERROR",
+  stage = "gwas_failed",
+  message_text = "subscript out of bounds",
+  gwas_id = "DONE_GWAS"
+)
+runtime_update_task(
+  task_id = build_task_id("DONE_GWAS", "chr2:2000:rs2", "postnatal", "GENE2"),
+  status = "completed",
+  gwas_id = "DONE_GWAS",
+  locus_id = "chr2:2000:rs2",
+  qtl_id = "postnatal",
+  phenotype = "GENE2",
+  result_file = file.path(tmp_complete_dir, "abf", "DONE_GWAS_rs2_locus_results.csv"),
+  pp4 = 0.91,
+  n_snps = 42
+)
+
+fwrite(
+  data.table(
+    GWAS_ID = "DONE_GWAS",
+    QTL_ID = "postnatal",
+    Locus = "rs2",
+    Phenotype = "GENE2",
+    PP4 = 0.91,
+    n_snps = 42
+  ),
+  file.path(tmp_complete_dir, "abf", "DONE_GWAS_rs2_locus_results.csv")
+)
+
+status_complete_out <- system2(
+  "Rscript",
+  c("tools/summarize_run_status.R", tmp_complete_dir),
+  stdout = TRUE,
+  stderr = TRUE
+)
+assert_true(any(grepl("DONE_GWAS", status_complete_out)), "complete status output missing inferred GWAS id")
+status_payload <- read_json(file.path(tmp_complete_dir, "run_status_summary.json"), simplifyVector = TRUE)
+assert_true(identical(status_payload$heartbeat$stage, "pipeline_complete"), "status payload missing complete heartbeat")
+assert_true(!isTRUE(status_payload$summary$current[[1]]), "completed run should not mark a GWAS as current")
+
+check_complete_out <- suppressWarnings(system2(
+  "Rscript",
+  c("tools/check_run_completion.R", tmp_complete_dir),
+  stdout = TRUE,
+  stderr = TRUE
+))
+check_complete_status <- attr(check_complete_out, "status")
+if (is.null(check_complete_status)) {
+  check_complete_status <- 0L
+}
+assert_true(check_complete_status == 1L, "completion check should fail when runtime recorded gwas_failed")
+assert_true(any(grepl("\\[CHECK\\] status: FAILED", check_complete_out)), "completion check should report FAILED when runtime recorded gwas_failed")
+
 cat("[SMOKE] output-dir tools smoke test passed\n")
 cat("[SMOKE] output dir:", tmp_dir, "\n")
