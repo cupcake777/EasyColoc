@@ -89,13 +89,7 @@ index_report_assets <- function(results_dir) {
 }
 
 build_report_web_payload <- function(results_dir, project_name = NULL) {
-  abf_files <- list.files(
-    file.path(results_dir, "abf"),
-    pattern = "_results\\.csv$",
-    full.names = TRUE
-  )
-
-  results_dt <- merge_results(abf_files)
+  results_dt <- read_report_results(results_dir)
   if (is.null(results_dt) || nrow(results_dt) == 0) {
     stop("No ABF result files found under ", file.path(results_dir, "abf"), call. = FALSE)
   }

@@ -36,8 +36,19 @@ abf_dt2 <- data.table(
   identification_method = "PLINK_clump"
 )
 
+abf_dt3 <- data.table(
+  GWAS_ID = "SMOKE_GWAS",
+  QTL_ID = "postnatal",
+  Locus = "rs10890256",
+  Phenotype = "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+",
+  PP4 = 0.88,
+  n_snps = 79,
+  identification_method = "PLINK_clump"
+)
+
 fwrite(abf_dt1, file.path(tmp_dir, "abf", "SMOKE_GWAS_rs10890255_locus_results.csv"))
 fwrite(abf_dt2, file.path(tmp_dir, "abf", "SMOKE_GWAS_rs2819340_locus_results.csv"))
+fwrite(abf_dt3, file.path(tmp_dir, "abf", "SMOKE_GWAS_rs10890256_locus_results.csv"))
 
 susie_dt <- data.table(
   cs_id = 1L,
@@ -55,11 +66,20 @@ merged <- merge_all_results(
 )
 
 assert_true(!is.null(merged), "merge_all_results() returned NULL")
-assert_true(nrow(merged) == 2, "merge_all_results() row count mismatch")
+assert_true(nrow(merged) == 3, "merge_all_results() row count mismatch")
 assert_true(file.exists(file.path(tmp_dir, "all_colocalization_results.csv")), "merged results file missing")
 assert_true(file.exists(file.path(tmp_dir, "significant_colocalizations_PP4_0.7.csv")), "significant results file missing")
+assert_true(file.exists(file.path(tmp_dir, "deduplicated_colocalization_results.csv")), "deduplicated results file missing")
+assert_true(file.exists(file.path(tmp_dir, "significant_unique_trait_phenotype_PP4_0.7.csv")), "deduplicated significant results file missing")
 assert_true(file.exists(file.path(tmp_dir, "all_susie_results.csv")), "merged SuSiE file missing")
 assert_true(file.exists(file.path(tmp_dir, "summary_statistics.txt")), "summary statistics file missing")
+
+dedup <- fread(file.path(tmp_dir, "deduplicated_colocalization_results.csv"))
+assert_true(nrow(dedup) == 2, "deduplicated results row count mismatch")
+assert_true(dedup[Phenotype == "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+", lead_locus_count][1] == 2,
+            "lead_locus_count mismatch for duplicated phenotype")
+assert_true(abs(dedup[Phenotype == "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+", PP4][1] - 0.91) < 1e-9,
+            "deduplicated PP4 should keep the best locus")
 
 report_ok <- generate_html_report(
   results_dir = tmp_dir,

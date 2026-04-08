@@ -444,8 +444,13 @@ except Exception as e:
 
                  if (liftover_res$success) {
                      log_message(glue("[FALLBACK] LiftOver successful: {liftover_res$start}-{liftover_res$end}"), verbose = verbose)
-                     # Return original data with updated coordinates if needed
-                     return(sumstats_dt)
+                     return(apply_liftover_positions(
+                         sumstats_dt = sumstats_dt,
+                         chrom = chr_clean,
+                         start_pos = region_start,
+                         end_pos = region_end,
+                         hg38_positions = liftover_res$positions
+                     ))
                  } else {
                      log_message("[FALLBACK] LiftOver also failed", verbose = verbose)
                  }
@@ -578,6 +583,45 @@ run_liftover_fallback <- function(sumstats_dt,
         start = hg38_positions[1, 3],
         end = hg38_positions[2, 3]
     ))
+}
+
+apply_liftover_positions <- function(sumstats_dt,
+                                     chrom,
+                                     start_pos,
+                                     end_pos,
+                                     hg38_positions) {
+    dt <- as.data.table(copy(sumstats_dt))
+    if (is.null(hg38_positions) || nrow(hg38_positions) < 2) {
+        return(dt)
+    }
+
+    chr_col <- intersect(c("CHR", "chr", "CHROM"), names(dt))[1]
+    pos_col <- intersect(c("POS", "pos", "BP", "POSITION"), names(dt))[1]
+    if (is.na(chr_col) || is.na(pos_col)) {
+        return(dt)
+    }
+
+    start_pos <- as.numeric(start_pos)
+    end_pos <- as.numeric(end_pos)
+    lifted_start <- as.numeric(hg38_positions[1, 3])
+    lifted_end <- as.numeric(hg38_positions[2, 3])
+    if (any(is.na(c(start_pos, end_pos, lifted_start, lifted_end)))) {
+        return(dt)
+    }
+
+    source_span <- end_pos - start_pos
+    lifted_span <- lifted_end - lifted_start
+    if (source_span == 0) {
+        scale_factor <- 1
+    } else {
+        scale_factor <- lifted_span / source_span
+    }
+
+    original_pos <- as.numeric(dt[[pos_col]])
+    offset <- original_pos - start_pos
+    dt[[pos_col]] <- as.integer(round(lifted_start + offset * scale_factor))
+    dt[[chr_col]] <- gsub("^chr", "", as.character(hg38_positions[1, 1]), ignore.case = TRUE)
+    dt
 }
 
 # =============================================================================
@@ -1037,6 +1081,39 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
     }, error = function(e) return(NULL))
 }
 
+deduplicate_coloc_results <- function(results_dt) {
+    if (is.null(results_dt) || nrow(results_dt) == 0) {
+        return(copy(results_dt))
+    }
+
+    dt <- as.data.table(copy(results_dt))
+    dt[, row_id___ := seq_len(.N)]
+
+    dedup <- dt[
+        ,
+        {
+            best_idx <- which.max(PP4)
+            best_row <- .SD[best_idx]
+            lead_locus_count <- uniqueN(.SD$Locus)
+            loci_collapsed <- paste(sort(unique(.SD$Locus)), collapse = ";")
+            supporting_source_files <- if ("source_file" %in% names(.SD)) {
+                paste(sort(unique(.SD$source_file)), collapse = ";")
+            } else {
+                NA_character_
+            }
+            best_row[, lead_locus_count := lead_locus_count]
+            best_row[, loci_collapsed := loci_collapsed]
+            best_row[, supporting_source_files := supporting_source_files]
+            best_row
+        },
+        by = .(GWAS_ID, QTL_ID, Phenotype)
+    ]
+
+    dedup[, row_id___ := NULL]
+    setorder(dedup, -PP4, GWAS_ID, QTL_ID, Phenotype)
+    dedup
+}
+
 # ------------------------------------------------------------------------------
 # merge_all_results: Aggregate colocalization results across all loci
 # ------------------------------------------------------------------------------
@@ -1075,15 +1152,21 @@ merge_all_results <- function(output_dir,
     
     # Sort by PP4 (descending)
     all_results <- all_results[order(-PP4)]
-    
+    dedup_results <- deduplicate_coloc_results(all_results)
+
     # Filter by PP4 threshold
     sig_results <- all_results[PP4 >= pp4_threshold]
-    
+    sig_dedup_results <- dedup_results[PP4 >= pp4_threshold]
+
     # Save merged results
     merged_file <- file.path(output_dir, "all_colocalization_results.csv")
     fwrite(all_results, merged_file)
     message(glue("[SUM] Saved merged results: {basename(merged_file)} ({nrow(all_results)} rows)"))
-    
+
+    dedup_file <- file.path(output_dir, "deduplicated_colocalization_results.csv")
+    fwrite(dedup_results, dedup_file)
+    message(glue("[SUM] Saved deduplicated results: {basename(dedup_file)} ({nrow(dedup_results)} rows)"))
+
     # Save significant results
     if (nrow(sig_results) > 0) {
         sig_file <- file.path(output_dir, glue("significant_colocalizations_PP4_{pp4_threshold}.csv"))
@@ -1091,6 +1174,14 @@ merge_all_results <- function(output_dir,
         message(glue("[SUM] Saved significant results (PP4 >= {pp4_threshold}): {basename(sig_file)} ({nrow(sig_results)} rows)"))
     } else {
         message(glue("[SUM] No significant results found with PP4 >= {pp4_threshold}"))
+    }
+
+    if (nrow(sig_dedup_results) > 0) {
+        sig_dedup_file <- file.path(output_dir, glue("significant_unique_trait_phenotype_PP4_{pp4_threshold}.csv"))
+        fwrite(sig_dedup_results, sig_dedup_file)
+        message(glue("[SUM] Saved deduplicated significant results (PP4 >= {pp4_threshold}): {basename(sig_dedup_file)} ({nrow(sig_dedup_results)} rows)"))
+    } else {
+        message(glue("[SUM] No deduplicated significant results found with PP4 >= {pp4_threshold}"))
     }
     
     # Merge SuSiE results if requested
@@ -1124,6 +1215,8 @@ merge_all_results <- function(output_dir,
         summary_stats <- list(
             total_tests = nrow(all_results),
             significant_colocalizations = nrow(sig_results),
+            unique_trait_phenotype_tests = nrow(dedup_results),
+            unique_significant_trait_phenotype = nrow(sig_dedup_results),
             unique_gwas_traits = length(unique(all_results$GWAS_ID)),
             unique_qtl_datasets = length(unique(all_results$QTL_ID)),
             unique_loci = length(unique(all_results$Locus)),
@@ -1152,12 +1245,17 @@ merge_all_results <- function(output_dir,
         cat("-------------------------------------------------------------\n")
         print(summary_df, row.names = FALSE)
         cat("\n")
-        
+
+        cat("Deduplication Note:\n")
+        cat("-------------------------------------------------------------\n")
+        cat("`significant_colocalizations` counts all locus-level rows.\n")
+        cat("`unique_significant_trait_phenotype` collapses repeated lead SNPs within the same GWAS/QTL/Phenotype combination, keeping the highest-PP4 row.\n\n")
+
         # Top genes by PP4
-        if (nrow(sig_results) > 0) {
-            cat("\nTop 10 APA Event-Locus Pairs by PP4:\n")
+        if (nrow(sig_dedup_results) > 0) {
+            cat("\nTop 10 Unique Trait-Phenotype Hits by PP4:\n")
             cat("-------------------------------------------------------------\n")
-            top_events <- head(sig_results[, .(GWAS_ID, QTL_ID, Locus, Phenotype, PP4, n_snps)], 10)
+            top_events <- head(sig_dedup_results[, .(GWAS_ID, QTL_ID, Locus, Phenotype, PP4, n_snps, lead_locus_count)], 10)
             print(top_events, row.names = FALSE)
         }
         

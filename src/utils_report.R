@@ -29,6 +29,24 @@ report_value <- function(row, primary, fallback = NULL, default = NA_character_)
   default
 }
 
+read_report_results <- function(results_dir) {
+  dedup_file <- file.path(results_dir, "deduplicated_colocalization_results.csv")
+  merged_file <- file.path(results_dir, "all_colocalization_results.csv")
+
+  if (file.exists(dedup_file)) {
+    return(fread(dedup_file))
+  }
+
+  if (file.exists(merged_file)) {
+    return(fread(merged_file))
+  }
+
+  abf_files <- list.files(file.path(results_dir, "abf"),
+                          pattern = "_results\\.csv$",
+                          full.names = TRUE)
+  merge_results(abf_files)
+}
+
 # =============================================================================
 # generate_html_report: Main report generation function
 # =============================================================================
@@ -38,17 +56,11 @@ generate_html_report <- function(results_dir,
 
   message("[Report] Generating interactive HTML report...")
 
-  # Find all result files
-  abf_files <- list.files(file.path(results_dir, "abf"),
-                          pattern = "_results\\.csv$",
-                          full.names = TRUE)
-
   susie_files <- list.files(file.path(results_dir, "susie"),
                             pattern = "_susie\\.csv$",
                             full.names = TRUE)
 
-  # Merge all results
-  all_results <- merge_results(abf_files)
+  all_results <- read_report_results(results_dir)
 
   if (is.null(all_results) || nrow(all_results) == 0) {
     warning("[Report] No results found to report")
@@ -120,6 +132,12 @@ get_summary_stats <- function(results) {
     character(0)
   }
 
+  lead_locus_count <- if ("lead_locus_count" %in% names(results)) {
+    results$lead_locus_count
+  } else {
+    rep(NA_integer_, nrow(results))
+  }
+
   list(
     total_tests = nrow(results),
     significant_pp4_08 = sum(results$PP4 >= 0.8, na.rm = TRUE),
@@ -131,7 +149,9 @@ get_summary_stats <- function(results) {
     min_pp4 = round(min(pp4_vals, na.rm = TRUE), 4),
     mean_n_snps = round(mean(results$n_snps, na.rm = TRUE), 1),
     unique_genes = length(unique(gene_labels)),
-    unique_loci = length(unique(results$Locus))
+    unique_loci = length(unique(results$Locus)),
+    duplicated_lead_groups = sum(!is.na(lead_locus_count) & lead_locus_count > 1),
+    max_lead_locus_count = if (all(is.na(lead_locus_count))) NA_integer_ else max(lead_locus_count, na.rm = TRUE)
   )
 }
 

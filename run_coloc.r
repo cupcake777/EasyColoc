@@ -478,7 +478,8 @@ run_pipeline <- function() {
                     n_threads = cfg_global$n_cores,
                     save_dir = cfg_global$harmonize_dir,
                     dataset_id = gwas_cfg$id,
-                    env_name = gwaslab_env
+                    env_name = gwaslab_env,
+                    liftover_chain = cfg_global$harmonization_settings$liftover_chain
                 )
 
                 if (!"N" %in% names(gwas_harm) && !is.null(gwas_cfg$sample_size_n)) {
