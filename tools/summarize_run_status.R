@@ -13,7 +13,7 @@ cfg_gwas <- if (!is.null(cfg_bundle)) cfg_bundle$gwas else NULL
 output_dir <- easycoloc_resolve_output_dir_arg(args, cfg_bundle = cfg_bundle, required = TRUE)
 
 timestamped_logs <- if (dir.exists(output_dir)) {
-  list.files(output_dir, pattern = "^run_easycoloc_full_[0-9]{8}_[0-9]{4,6}\\.log$", full.names = TRUE)
+  list.files(output_dir, pattern = "^run_easycoloc_(full|bg)_[0-9]{8}_[0-9]{4,6}\\.log$", full.names = TRUE)
 } else {
   character(0)
 }
@@ -21,7 +21,14 @@ timestamped_logs <- if (dir.exists(output_dir)) {
 latest_log <- NULL
 if (length(timestamped_logs) > 0) {
   info <- file.info(timestamped_logs)
-  latest_log <- rownames(info)[which.max(info$mtime)]
+  # Filter out empty log files if there are non-empty ones available
+  non_empty_logs <- timestamped_logs[info$size > 0]
+  if (length(non_empty_logs) > 0) {
+    info <- info[non_empty_logs, , drop = FALSE]
+    latest_log <- rownames(info)[which.max(info$mtime)]
+  } else {
+    latest_log <- rownames(info)[which.max(info$mtime)]
+  }
 }
 
 runtime_dir <- file.path(output_dir, "runtime")

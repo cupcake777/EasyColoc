@@ -13,10 +13,22 @@ normalize_chr_for_plink <- function(x) {
 }
 
 gwas_file <- "./harmony/EAS_SCZ_b19to38_harmonized.tsv"
-bim_file <- "/home/lyc/share_group_folder/ref/1KG/hg38/1kg_hg38_filtered.bim"
-keep_file <- "/home/lyc/share_group_folder/ref/1KG/EAS.sample"
+bim_prefix <- Sys.getenv("EASYCOLOC_SMOKE_PLINK_PREFIX", unset = "refs/plink/hg38/1kg_hg38_filtered")
+keep_file <- Sys.getenv("EASYCOLOC_SMOKE_KEEP_FILE", unset = "refs/plink/keep/EAS.sample")
+bim_file <- paste0(bim_prefix, ".bim")
 plink_prefix <- "temp/smoke_clump_EAS_SCZ"
 input_file <- paste0(plink_prefix, ".qassoc")
+
+if (!file.exists(gwas_file)) {
+  cat("[SMOKE-SKIP] harmonized GWAS fixture missing:", gwas_file, "\n")
+  quit(save = "no", status = 0)
+}
+
+if (!file.exists(bim_file) || !file.exists(keep_file)) {
+  cat("[SMOKE-SKIP] local PLINK references unavailable\n")
+  cat("[SMOKE-SKIP] Set EASYCOLOC_SMOKE_PLINK_PREFIX and EASYCOLOC_SMOKE_KEEP_FILE to run this smoke test.\n")
+  quit(save = "no", status = 0)
+}
 
 gwas <- fread(gwas_file)
 gwas <- gwas[P <= 1e-7]
@@ -61,7 +73,7 @@ fwrite(clump_input, input_file, sep = "\t", quote = FALSE)
 
 plink_cmd <- paste(
   "plink",
-  "--bfile", shQuote(sub("\\.bim$", "", bim_file)),
+  "--bfile", shQuote(bim_prefix),
   "--clump", shQuote(input_file),
   "--keep", shQuote(keep_file),
   "--clump-p1 1e-7",
