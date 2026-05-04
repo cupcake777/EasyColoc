@@ -58,6 +58,8 @@ parse_common_flags() {
   local managed="false"
   local passthrough=()
 
+  COMMON_PASSTHROUGH=()
+
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --global)
@@ -96,7 +98,9 @@ parse_common_flags() {
   COMMON_QTL_CFG="${qtl_cfg}"
   COMMON_OUTPUT_DIR="${output_dir}"
   COMMON_MANAGED="${managed}"
-  COMMON_PASSTHROUGH=("${passthrough[@]}")
+  if (( ${#passthrough[@]} > 0 )); then
+    COMMON_PASSTHROUGH=("${passthrough[@]}")
+  fi
 }
 
 cmd="${1:-help}"
@@ -122,18 +126,32 @@ case "${cmd}" in
       if [[ -n "${COMMON_OUTPUT_DIR}" ]]; then
         managed_args+=(--output-dir "${COMMON_OUTPUT_DIR}")
       fi
-      managed_args+=("${COMMON_PASSTHROUGH[@]}")
-      exec "${repo_root}/tools/run_pipeline_managed.sh" "${managed_args[@]}"
+      if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
+        managed_args+=("${COMMON_PASSTHROUGH[@]}")
+      fi
+      if (( ${#managed_args[@]} > 0 )); then
+        exec "${repo_root}/tools/run_pipeline_managed.sh" "${managed_args[@]}"
+      else
+        exec "${repo_root}/tools/run_pipeline_managed.sh"
+      fi
     fi
     if [[ -n "${COMMON_OUTPUT_DIR}" ]]; then
       export EASYCOLOC_OUTPUT_DIR="${COMMON_OUTPUT_DIR}"
     fi
-    exec Rscript run_coloc.r "${COMMON_PASSTHROUGH[@]}"
+    if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
+      exec Rscript run_coloc.r "${COMMON_PASSTHROUGH[@]}"
+    else
+      exec Rscript run_coloc.r
+    fi
     ;;
   doctor)
     parse_common_flags "$@"
     set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
-    exec Rscript tools/doctor_easycoloc.R "${COMMON_PASSTHROUGH[@]}"
+    if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
+      exec Rscript tools/doctor_easycoloc.R "${COMMON_PASSTHROUGH[@]}"
+    else
+      exec Rscript tools/doctor_easycoloc.R
+    fi
     ;;
   init)
     force="false"
@@ -206,12 +224,20 @@ EOF
   refs)
     parse_common_flags "$@"
     set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
-    exec Rscript tools/list_reference_requirements.R "${COMMON_PASSTHROUGH[@]}"
+    if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
+      exec Rscript tools/list_reference_requirements.R "${COMMON_PASSTHROUGH[@]}"
+    else
+      exec Rscript tools/list_reference_requirements.R
+    fi
     ;;
   bootstrap-refs)
     parse_common_flags "$@"
     set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
-    exec Rscript tools/bootstrap_references.R "${COMMON_PASSTHROUGH[@]}"
+    if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
+      exec Rscript tools/bootstrap_references.R "${COMMON_PASSTHROUGH[@]}"
+    else
+      exec Rscript tools/bootstrap_references.R
+    fi
     ;;
   smoke)
     exec "${repo_root}/tools/run_smoke_checks.sh"

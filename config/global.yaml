@@ -10,9 +10,13 @@ random_seed: 20240326  # Global seed for reproducibility (SuSiE, parallel proces
 # Replace these with project-local paths, or keep the same layout under `refs/`.
 plink_hg19: "refs/plink/hg19/1kg_hg19_filtered"
 plink_hg38: "refs/plink/hg38/1kg_hg38_filtered"
-plink_keep: "refs/plink/keep/default.sample"
+plink_keep:                                    # map: pop code -> sample file; omit a pop to use all samples
+  EAS: "refs/plink/keep/EAS.sample"
+  EUR: "refs/plink/keep/EUR.sample"
 hash_table_dir: ""
-recom: "refs/recomb/hg38/CHB/CHB"
+recom:                                         # map: pop code -> HapMap file prefix (dir/PopName)
+  EAS: "refs/recomb/hg38/CHB/CHB"
+  EUR: "refs/recomb/hg38/CEU/CEU"
 gene_anno: "refs/annotation/gencode.v40.annotation.gtf.gz"
 ref_genome_hg19: "refs/genome/GRCh37.fa.gz"
 ref_genome_hg38: "refs/genome/GRCh38.fa.gz"

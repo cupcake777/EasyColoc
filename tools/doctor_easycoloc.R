@@ -59,6 +59,44 @@ record_check <- function(status, category, item, detail) {
 }
 
 check_scalar_path <- function(path_value, category, item, required = TRUE, allow_missing = FALSE) {
+  if (is.list(path_value)) {
+    if (length(path_value) == 0) {
+      if (required) {
+        record_check("FAIL", category, item, "path is missing")
+      } else {
+        record_check("WARN", category, item, "path not configured")
+      }
+      return(invisible(FALSE))
+    }
+    ok <- TRUE
+    for (path_name in names(path_value)) {
+      child_item <- if (nzchar(path_name)) paste0(item, "_", path_name) else item
+      child_ok <- check_scalar_path(
+        path_value[[path_name]],
+        category,
+        child_item,
+        required = required,
+        allow_missing = allow_missing
+      )
+      ok <- ok && isTRUE(child_ok)
+    }
+    return(invisible(ok))
+  }
+  if (length(path_value) > 1) {
+    ok <- TRUE
+    for (idx in seq_along(path_value)) {
+      child_item <- paste0(item, "_", idx)
+      child_ok <- check_scalar_path(
+        path_value[[idx]],
+        category,
+        child_item,
+        required = required,
+        allow_missing = allow_missing
+      )
+      ok <- ok && isTRUE(child_ok)
+    }
+    return(invisible(ok))
+  }
   if (is.null(path_value) || length(path_value) == 0 || is.na(path_value) || !nzchar(path_value)) {
     if (required) {
       record_check("FAIL", category, item, "path is missing")
@@ -224,13 +262,19 @@ results[, status := as.character(status)]
 
 for (row_idx in seq_len(nrow(results))) {
   row <- results[row_idx]
-  tag <- switch(row$status, FAIL = "[FAIL]", WARN = "[WARN]", OK = "[OK]")
+  tag <- switch(row$status,
+    FAIL = "[FAIL]",
+    WARN = "[WARN]",
+    OK = "[OK]"
+  )
   cat(tag, sprintf("%-10s", row$category), sprintf("%-30s", row$item), row$detail, "\n")
 }
 
 summary_counts <- results[, .N, by = status]
-cat("\n[DOCTOR] summary:",
-    paste(sprintf("%s=%s", summary_counts$status, summary_counts$N), collapse = " "),
-    "\n")
+cat(
+  "\n[DOCTOR] summary:",
+  paste(sprintf("%s=%s", summary_counts$status, summary_counts$N), collapse = " "),
+  "\n"
+)
 
 quit(status = if (any(results$status == "FAIL")) 1 else 0)

@@ -11,6 +11,7 @@ reference_bootstrap_manifest.tsv
 reference_bootstrap_manifest.json
 examples/minimal/output/
 config/local/*
+r_environment.yml
 docs/superpowers/
 !config/local/README.md
 
@@ -38,6 +39,7 @@ docs/optimization/
 
 # OS files
 .DS_Store
+._*
 Thumbs.db
 
 # IDE files

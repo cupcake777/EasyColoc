@@ -19,6 +19,7 @@ dependencies:
   - r-coloc
   - r-susier
   - r-ggplot2
+  - r-viridis
   - r-ggpubr
   - r-ggrepel
   - r-tidyr

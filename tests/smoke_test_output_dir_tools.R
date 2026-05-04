@@ -178,5 +178,38 @@ if (is.null(check_complete_status)) {
 assert_true(check_complete_status == 1L, "completion check should fail when runtime recorded gwas_failed")
 assert_true(any(grepl("\\[CHECK\\] status: FAILED", check_complete_out)), "completion check should report FAILED when runtime recorded gwas_failed")
 
+tmp_failed_dir <- tempfile(pattern = "easycoloc_output_tools_failed_")
+dir.create(tmp_failed_dir, recursive = TRUE, showWarnings = FALSE)
+
+failed_log_file <- file.path(tmp_failed_dir, "run_easycoloc_full_20990101_020202.log")
+writeLines(
+  c(
+    "Processing GWAS Dataset: FAIL_GWAS",
+    "EasyColoc pipeline finished with failures"
+  ),
+  failed_log_file
+)
+
+initialize_runtime_tracker(tmp_failed_dir, enabled = TRUE, config_fingerprint = "smoke_fp_failed")
+register_active_run(log_file = failed_log_file, run_label = "output_tools_failed")
+write_runtime_heartbeat(stage = "pipeline_failed", message_text = "pipeline finished with failures")
+append_runtime_event(
+  level = "ERROR",
+  stage = "pipeline_failed",
+  message_text = "EasyColoc pipeline finished with failures",
+  gwas_id = "FAIL_GWAS"
+)
+
+status_failed_out <- system2(
+  "Rscript",
+  c("tools/summarize_run_status.R", tmp_failed_dir),
+  stdout = TRUE,
+  stderr = TRUE
+)
+assert_true(any(grepl("FAIL_GWAS", status_failed_out)), "failed status output missing inferred GWAS id")
+failed_payload <- read_json(file.path(tmp_failed_dir, "run_status_summary.json"), simplifyVector = TRUE)
+assert_true(identical(failed_payload$heartbeat$stage, "pipeline_failed"), "status payload missing failed heartbeat")
+assert_true(!isTRUE(failed_payload$summary$current[[1]]), "failed run should not mark a GWAS as current")
+
 cat("[SMOKE] output-dir tools smoke test passed\n")
 cat("[SMOKE] output dir:", tmp_dir, "\n")

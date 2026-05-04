@@ -20,23 +20,33 @@ runtime_timestamp <- function() {
 }
 
 runtime_scalar_chr <- function(x) {
-  if (is.null(x) || length(x) == 0) return(NA_character_)
+  if (is.null(x) || length(x) == 0) {
+    return(NA_character_)
+  }
   x <- as.character(x[[1]])
-  if (!nzchar(x) || identical(x, "NA")) return(NA_character_)
+  if (!nzchar(x) || identical(x, "NA")) {
+    return(NA_character_)
+  }
   x
 }
 
 runtime_scalar_num <- function(x) {
-  if (is.null(x) || length(x) == 0) return(NA_real_)
+  if (is.null(x) || length(x) == 0) {
+    return(NA_real_)
+  }
   suppressWarnings(as.numeric(x[[1]]))
 }
 
 compute_runtime_config_fingerprint <- function(files) {
   files <- unique(files[file.exists(files)])
-  if (length(files) == 0) return(NA_character_)
+  if (length(files) == 0) {
+    return(NA_character_)
+  }
 
   hashes <- tryCatch(tools::md5sum(files), error = function(e) NULL)
-  if (is.null(hashes) || length(hashes) == 0) return(NA_character_)
+  if (is.null(hashes) || length(hashes) == 0) {
+    return(NA_character_)
+  }
 
   paste(sprintf("%s=%s", basename(names(hashes)), unname(hashes)), collapse = ";")
 }
@@ -91,7 +101,9 @@ rebuild_runtime_task_index <- function(state = runtime_task_state()) {
 }
 
 persist_runtime_task_state <- function() {
-  if (!runtime_is_enabled()) return(invisible(FALSE))
+  if (!runtime_is_enabled()) {
+    return(invisible(FALSE))
+  }
 
   paths <- runtime_paths()
   state <- copy(runtime_task_state())
@@ -148,7 +160,9 @@ register_active_run <- function(log_file = NA_character_,
                                 run_label = NA_character_,
                                 parent_pid = NA_integer_,
                                 command = "Rscript run_coloc.r") {
-  if (!runtime_is_enabled()) return(invisible(FALSE))
+  if (!runtime_is_enabled()) {
+    return(invisible(FALSE))
+  }
 
   payload <- list(
     timestamp = runtime_timestamp(),
@@ -165,7 +179,9 @@ register_active_run <- function(log_file = NA_character_,
 }
 
 clear_active_run <- function() {
-  if (!runtime_is_enabled()) return(invisible(FALSE))
+  if (!runtime_is_enabled()) {
+    return(invisible(FALSE))
+  }
 
   active_run_file <- runtime_paths()$active_run
   if (!is.null(active_run_file) && file.exists(active_run_file)) {
@@ -183,7 +199,9 @@ append_runtime_event <- function(level = "INFO",
                                  phenotype = NA_character_,
                                  task_id = NA_character_,
                                  extras = list()) {
-  if (!runtime_is_enabled()) return(invisible(FALSE))
+  if (!runtime_is_enabled()) {
+    return(invisible(FALSE))
+  }
 
   payload <- list(
     timestamp = runtime_timestamp(),
@@ -212,7 +230,9 @@ write_runtime_heartbeat <- function(stage,
                                     message_text = NA_character_,
                                     counters = list(),
                                     extras = list()) {
-  if (!runtime_is_enabled()) return(invisible(FALSE))
+  if (!runtime_is_enabled()) {
+    return(invisible(FALSE))
+  }
 
   payload <- list(
     timestamp = runtime_timestamp(),
@@ -234,7 +254,9 @@ build_task_id <- function(gwas_id, locus_id, qtl_id, phenotype) {
     pieces,
     function(x) {
       x <- runtime_scalar_chr(x)
-      if (is.na(x)) return("NA")
+      if (is.na(x)) {
+        return("NA")
+      }
       gsub("[^[:alnum:]_.:-]+", "_", x)
     },
     character(1)
@@ -243,21 +265,29 @@ build_task_id <- function(gwas_id, locus_id, qtl_id, phenotype) {
 }
 
 runtime_task_completed <- function(task_id, config_fingerprint = NA_character_) {
-  if (!runtime_is_enabled()) return(FALSE)
+  if (!runtime_is_enabled()) {
+    return(FALSE)
+  }
 
   task_id <- runtime_scalar_chr(task_id)
-  if (is.na(task_id)) return(FALSE)
+  if (is.na(task_id)) {
+    return(FALSE)
+  }
 
   idx <- get0(task_id, envir = runtime_task_index(), ifnotfound = NA_integer_)
-  if (is.na(idx)) return(FALSE)
+  if (is.na(idx)) {
+    return(FALSE)
+  }
   state <- runtime_task_state()
-  if (idx < 1L || idx > nrow(state)) return(FALSE)
+  if (idx < 1L || idx > nrow(state)) {
+    return(FALSE)
+  }
   hit <- state[idx]
 
   if (!is.na(config_fingerprint) &&
-      "config_fingerprint" %in% names(hit) &&
-      !all(is.na(hit$config_fingerprint)) &&
-      !any(hit$config_fingerprint == config_fingerprint, na.rm = TRUE)) {
+    "config_fingerprint" %in% names(hit) &&
+    !all(is.na(hit$config_fingerprint)) &&
+    !any(hit$config_fingerprint == config_fingerprint, na.rm = TRUE)) {
     return(FALSE)
   }
 
@@ -278,17 +308,25 @@ runtime_update_task <- function(task_id,
                                 n_snps = NULL,
                                 error_message = NULL,
                                 persist = TRUE) {
-  if (!runtime_is_enabled()) return(invisible(FALSE))
+  if (!runtime_is_enabled()) {
+    return(invisible(FALSE))
+  }
 
   task_id <- runtime_scalar_chr(task_id)
-  if (is.na(task_id)) return(invisible(FALSE))
+  if (is.na(task_id)) {
+    return(invisible(FALSE))
+  }
 
   state <- runtime_task_state()
   idx <- get0(task_id, envir = runtime_task_index(), ifnotfound = NA_integer_)
   if (is.na(idx)) {
     new_row <- runtime_empty_task_state()[, lapply(.SD, function(col) {
-      if (is.integer(col)) return(NA_integer_)
-      if (is.numeric(col)) return(NA_real_)
+      if (is.integer(col)) {
+        return(NA_integer_)
+      }
+      if (is.numeric(col)) {
+        return(NA_real_)
+      }
       NA_character_
     })]
     state <- rbind(state, new_row, fill = TRUE)
@@ -348,15 +386,23 @@ runtime_update_task <- function(task_id,
 }
 
 runtime_get_task_record <- function(task_id) {
-  if (!runtime_is_enabled()) return(NULL)
+  if (!runtime_is_enabled()) {
+    return(NULL)
+  }
 
   task_id <- runtime_scalar_chr(task_id)
-  if (is.na(task_id)) return(NULL)
+  if (is.na(task_id)) {
+    return(NULL)
+  }
 
   idx <- get0(task_id, envir = runtime_task_index(), ifnotfound = NA_integer_)
-  if (is.na(idx)) return(NULL)
+  if (is.na(idx)) {
+    return(NULL)
+  }
   state <- runtime_task_state()
-  if (idx < 1L || idx > nrow(state)) return(NULL)
+  if (idx < 1L || idx > nrow(state)) {
+    return(NULL)
+  }
   state[idx]
 }
 
@@ -364,7 +410,9 @@ runtime_get_task_record <- function(task_id) {
 
 resolve_gene_label <- function(phenotype_label) {
   phenotype_label <- runtime_scalar_chr(phenotype_label)
-  if (is.na(phenotype_label)) return("NA")
+  if (is.na(phenotype_label)) {
+    return("NA")
+  }
 
   cache_key <- phenotype_label
   if (exists(cache_key, envir = .gene_label_cache, inherits = FALSE)) {
@@ -375,14 +423,14 @@ resolve_gene_label <- function(phenotype_label) {
 
   parsed <- tryCatch(parse_geneID(phenotype_label), error = function(e) NULL)
   if (!is.null(parsed) && !is.null(parsed$geneSymbol) &&
-      !is.na(parsed$geneSymbol) && nzchar(parsed$geneSymbol)) {
+    !is.na(parsed$geneSymbol) && nzchar(parsed$geneSymbol)) {
     resolved <- parsed$geneSymbol
   } else {
     base <- sub("\\..*$", "", phenotype_label)
-    if (grepl("^ENSG[0-9]{11}$", base)) {
+    if (grepl("^ENSG[0-9]{11}$", base) && requireNamespace("clusterProfiler", quietly = TRUE)) {
       converted <- tryCatch(
         suppressMessages(
-          bitr(base, fromType = "ENSEMBL", toType = "SYMBOL", OrgDb = "org.Hs.eg.db")
+          clusterProfiler::bitr(base, fromType = "ENSEMBL", toType = "SYMBOL", OrgDb = "org.Hs.eg.db")
         ),
         error = function(e) NULL
       )

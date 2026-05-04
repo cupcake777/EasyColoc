@@ -3,16 +3,41 @@
 [![smoke-lite](https://github.com/cupcake777/EasyColoc/actions/workflows/smoke-lite.yml/badge.svg)](https://github.com/cupcake777/EasyColoc/actions/workflows/smoke-lite.yml)
 [![License](https://img.shields.io/github/license/cupcake777/EasyColoc)](LICENSE)
 [![Build Support](https://img.shields.io/badge/build-hg19%20%7C%20hg38-1f6feb)](docs/REFERENCE_COMPATIBILITY.md)
+[![Report UI](https://img.shields.io/badge/report-interactive%20web-0f766e)](#interactive-report)
+[![ABF + SuSiE](https://img.shields.io/badge/coloc-ABF%20%2B%20SuSiE-be3455)](#why-easycoloc)
 
 EasyColoc is a practical GWAS-to-QTL colocalization pipeline built for real
-inputs rather than idealized examples. It focuses on two recurring pain points:
+inputs rather than idealized examples. It standardizes public GWAS summary
+statistics, queries tabix-indexed QTL resources, runs ABF and SuSiE coloc, and
+ships results as tables, locus plots, manifests, runtime snapshots, and an
+interactive HTML report.
+
+<p align="center">
+  <img src="docs/assets/synthetic_locus_demo.png" alt="EasyColoc synthetic locus report panel" width="920">
+</p>
+
+<p align="center">
+  <a href="#2-minute-quickstart"><strong>Quickstart</strong></a> ·
+  <a href="#interactive-report"><strong>Interactive report</strong></a> ·
+  <a href="docs/TUTORIAL.md"><strong>Tutorial</strong></a> ·
+  <a href="docs/REFERENCE_COMPATIBILITY.md"><strong>Reference compatibility</strong></a> ·
+  <a href="docs/ARCHITECTURE.md"><strong>Architecture</strong></a>
+</p>
+
+## What You Get
+
+| Capability | Why it matters |
+| --- | --- |
+| Build-aware GWAS/QTL handling | Supports `hg19` and `hg38` inputs without hiding coordinate assumptions |
+| ABF + SuSiE coloc | Keeps locus-level PP4 review and signal-level fine-mapping follow-up in one run |
+| Tabix-backed QTL queries | Scales to indexed QTL resources instead of loading whole studies into memory |
+| Managed runtime outputs | Writes heartbeat, manifest, monitor snapshots, and completion checks |
+| Visual report | Gives users a browsable result dashboard with ranked signals, filters, plots, and downloads |
+
+EasyColoc focuses on two recurring pain points:
 
 1. Public GWAS summary statistics often arrive in inconsistent `hg19`-era formats.
 2. Many coloc workflows stop at `coloc.abf` and never carry signal-level follow-up through `SuSiE`.
-
-EasyColoc standardizes GWAS inputs, queries tabix-indexed QTL resources, and
-produces ABF and SuSiE results together with plots, manifests, runtime
-snapshots, and an HTML report.
 
 ## Fast Start For Existing Results
 
@@ -24,6 +49,27 @@ If you already have a finished `results/` directory, open the local web report w
 
 This command generates or refreshes `report_web/report-data.json` under the
 target results directory, then starts a local report web server.
+
+## Interactive Report
+
+The report web app is designed to make a finished run easy to inspect and easy
+to share in screenshots:
+
+- summary metric cards for total tests, PP4 thresholds, mean PP4, unique genes, and loci
+- searchable coloc result table with a PP4 threshold slider
+- top-hit strip for quick navigation across strongest signals
+- sticky locus detail panel for GWAS, QTL, phenotype, PP4, SNP count, and source file
+- indexed plot and download panels from the result directory
+
+For local viewing:
+
+```bash
+./easycoloc report-web /path/to/results
+```
+
+For GitHub-facing presentation, include `docs/assets/synthetic_locus_demo.png`
+or a project-specific report screenshot near the top of your README or project
+documentation so users can see the expected output before installing anything.
 
 ## Scientific Guardrails
 

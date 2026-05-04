@@ -14,7 +14,11 @@ easycoloc_resolve_project_root <- function(cfg_global, global_config_path) {
   }
   if (!is.null(cfg_global$project_root) && nzchar(cfg_global$project_root)) {
     base_dir <- easycoloc_path_dirname(global_config_path)
-    return(normalizePath(file.path(base_dir, cfg_global$project_root), mustWork = FALSE))
+    expanded_root <- path.expand(cfg_global$project_root)
+    if (grepl("^(/|[A-Za-z]:[/\\\\])", expanded_root)) {
+      return(normalizePath(expanded_root, mustWork = FALSE))
+    }
+    return(normalizePath(file.path(base_dir, expanded_root), mustWork = FALSE))
   }
   normalizePath(getwd(), mustWork = FALSE)
 }
@@ -31,6 +35,33 @@ easycoloc_path_dirname <- function(path) {
   normalizePath(dirname(path), mustWork = FALSE)
 }
 
+easycoloc_expand_env_vars <- function(path_value) {
+  if (is.null(path_value) || length(path_value) == 0) {
+    return(path_value)
+  }
+  if (!is.character(path_value)) {
+    return(path_value)
+  }
+  expanded <- vapply(path_value, function(single_path) {
+    if (is.na(single_path) || !nzchar(single_path)) {
+      return(single_path)
+    }
+    out <- single_path
+    matches <- gregexpr("\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}|\\$[A-Za-z_][A-Za-z0-9_]*", out, perl = TRUE)
+    tokens <- unique(regmatches(out, matches)[[1]])
+    if (length(tokens) == 0 || identical(tokens, character(0))) {
+      return(out)
+    }
+    for (token in tokens) {
+      var <- sub("^\\$\\{?([^}]+)\\}?$", "\\1", token, perl = TRUE)
+      value <- Sys.getenv(var, unset = token)
+      out <- gsub(token, value, out, fixed = TRUE)
+    }
+    out
+  }, character(1))
+  unname(expanded)
+}
+
 easycoloc_resolve_path <- function(path_value, base_dir) {
   if (is.null(path_value) || length(path_value) == 0) {
     return(path_value)
@@ -42,7 +73,7 @@ easycoloc_resolve_path <- function(path_value, base_dir) {
     if (is.na(single_path) || !nzchar(single_path)) {
       return(single_path)
     }
-    expanded <- path.expand(single_path)
+    expanded <- path.expand(easycoloc_expand_env_vars(single_path))
     if (grepl("^(/|[A-Za-z]:[/\\\\])", expanded)) {
       return(expanded)
     }
@@ -51,16 +82,35 @@ easycoloc_resolve_path <- function(path_value, base_dir) {
   unname(resolved)
 }
 
+easycoloc_resolve_named_paths <- function(path_list, base_dir) {
+  if (is.null(path_list) || length(path_list) == 0) {
+    return(path_list)
+  }
+  if (!is.list(path_list)) {
+    return(easycoloc_resolve_path(path_list, base_dir))
+  }
+  for (nm in names(path_list)) {
+    path_list[[nm]] <- easycoloc_resolve_path(path_list[[nm]], base_dir)
+  }
+  path_list
+}
+
 easycoloc_resolve_global_paths <- function(cfg_global, base_dir) {
   path_fields <- c(
-    "output_dir", "temp_dir", "plink_hg19", "plink_hg38", "plink_keep", "hash_table_dir",
-    "recom", "gene_anno", "ref_genome_hg19", "ref_genome_hg38",
+    "output_dir", "temp_dir", "plink_hg19", "plink_hg38", "hash_table_dir",
+    "gene_anno", "ref_genome_hg19", "ref_genome_hg38",
     "1kg_af", "dbsnp_hg19", "dbsnp_hg38", "harmonize_dir"
   )
   for (field in path_fields) {
     if (!is.null(cfg_global[[field]])) {
-        cfg_global[[field]] <- easycoloc_resolve_path(cfg_global[[field]], base_dir)
+      cfg_global[[field]] <- easycoloc_resolve_path(cfg_global[[field]], base_dir)
     }
+  }
+  if (!is.null(cfg_global$plink_keep)) {
+    cfg_global$plink_keep <- easycoloc_resolve_named_paths(cfg_global$plink_keep, base_dir)
+  }
+  if (!is.null(cfg_global$recom)) {
+    cfg_global$recom <- easycoloc_resolve_named_paths(cfg_global$recom, base_dir)
   }
   if (!is.null(cfg_global$harmonization_settings$liftover_chain)) {
     cfg_global$harmonization_settings$liftover_chain <- easycoloc_resolve_path(
@@ -149,8 +199,8 @@ easycoloc_resolve_output_dir_arg <- function(args = character(),
   }
 
   if (!is.null(cfg_bundle) &&
-      !is.null(cfg_bundle$global$output_dir) &&
-      nzchar(cfg_bundle$global$output_dir)) {
+    !is.null(cfg_bundle$global$output_dir) &&
+    nzchar(cfg_bundle$global$output_dir)) {
     return(normalizePath(cfg_bundle$global$output_dir, mustWork = FALSE))
   }
 

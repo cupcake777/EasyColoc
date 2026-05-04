@@ -279,11 +279,12 @@ easycoloc_copy_project_template <- function(dest_dir, force = FALSE) {
 }
 
 easycoloc_write_demo_ped_map <- function(prefix) {
+  positions <- c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800)
   map_dt <- data.table(
     CHR = rep(22, 8),
-    SNP = paste0("rsdemo", seq_len(8)),
+    SNP = paste0("chr22:", positions, ":A:G"),
     CM = 0,
-    POS = c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800)
+    POS = positions
   )
   ped_rows <- list(
     c("D1", "D1", 0, 0, 1, 1, "A", "A", "A", "G", "G", "G", "A", "G", "A", "A", "A", "G", "G", "G", "A", "G"),
@@ -302,21 +303,25 @@ easycoloc_create_demo_qtl <- function(project_dir) {
   qtl_dir <- file.path(project_dir, "data", "qtl")
   dir.create(qtl_dir, recursive = TRUE, showWarnings = FALSE)
   phenotype_id <- "ENSTDEMO001|GENEDEMO|chr22:200000-201000|+"
+  positions <- c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800)
+  variant_ids <- paste0("chr22:", positions, ":A:G")
+  qtl_beta <- c(0.90, 0.15, 0.08, 0.05, 0.03, 0.02, 0.01, 0.005)
+  qtl_p <- c(5e-12, 2e-01, 3e-01, 4e-01, 5e-01, 6e-01, 7e-01, 8e-01)
   qtl_dt <- data.table(
     chr = rep("chr22", 8),
-    pos = c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800),
+    pos = positions,
     ref = rep("A", 8),
     alt = rep("G", 8),
     phenotype_id = rep(phenotype_id, 8),
-    variant_id = paste0("chr22:", c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800), ":A:G"),
+    variant_id = variant_ids,
     start_distance = c(100, 200, 300, 400, 500, 600, 700, 800),
     end_distance = c(900, 800, 700, 600, 500, 400, 300, 200),
     af = c(0.10, 0.12, 0.15, 0.18, 0.20, 0.22, 0.24, 0.26),
     ma_samples = c(2, 2, 2, 3, 3, 3, 4, 4),
     ma_count = c(2, 2, 3, 3, 4, 4, 5, 5),
-    pval_nominal = c(1e-09, 5e-08, 1e-06, 1e-04, 3e-03, 2e-02, 8e-02, 2e-01),
-    slope = c(0.82, 0.65, 0.48, 0.31, 0.18, 0.09, 0.03, 0.01),
-    slope_se = c(0.12, 0.13, 0.14, 0.15, 0.16, 0.16, 0.18, 0.20)
+    pval_nominal = qtl_p,
+    slope = qtl_beta,
+    slope_se = abs(qtl_beta / qnorm(qtl_p / 2, lower.tail = FALSE))
   )
   all_pairs_tsv <- file.path(qtl_dir, "all_pairs_demo.txt")
   sig_pairs_tsv <- file.path(qtl_dir, "sig_pairs_demo.txt")
@@ -331,7 +336,7 @@ easycoloc_create_demo_qtl <- function(project_dir) {
 
   summary_dt <- data.table(
     Type = "demo_eqtl",
-    NumberRNASeqandGTSamples = 320,
+    NumberRNASeqandGTSamples = 1000,
     allPairsTabixFilename = "all_pairs_demo.txt.gz",
     sigPairsTabixFilename = "sig_pairs_demo.txt.gz"
   )
@@ -341,15 +346,18 @@ easycoloc_create_demo_qtl <- function(project_dir) {
 easycoloc_write_demo_gwas <- function(project_dir) {
   gwas_dir <- file.path(project_dir, "data", "gwas")
   dir.create(gwas_dir, recursive = TRUE, showWarnings = FALSE)
+  positions <- c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800)
+  gwas_beta <- c(0.90, 0.15, 0.08, 0.05, 0.03, 0.02, 0.01, 0.005)
+  gwas_p <- c(5e-12, 2e-01, 3e-01, 4e-01, 5e-01, 6e-01, 7e-01, 8e-01)
   gwas_dt <- data.table(
-    SNP = paste0("rsdemo", seq_len(8)),
+    SNP = paste0("chr22:", positions, ":A:G"),
     CHR = rep(22, 8),
-    BP = c(200100, 200200, 200300, 200400, 200500, 200600, 200700, 200800),
+    BP = positions,
     A1 = rep("G", 8),
     A2 = rep("A", 8),
-    P = c(5e-10, 2e-08, 8e-07, 5e-05, 1e-03, 1e-02, 5e-02, 2e-01),
-    BETA = c(0.78, 0.59, 0.44, 0.26, 0.15, 0.07, 0.02, 0.00),
-    SE = c(0.11, 0.12, 0.13, 0.14, 0.15, 0.15, 0.17, 0.19),
+    P = gwas_p,
+    BETA = gwas_beta,
+    SE = abs(gwas_beta / qnorm(gwas_p / 2, lower.tail = FALSE)),
     EAF = c(0.10, 0.12, 0.15, 0.18, 0.20, 0.22, 0.24, 0.26),
     N = 5000
   )
@@ -378,7 +386,7 @@ easycoloc_write_demo_configs <- function(project_dir) {
     harmonize_dir = "harmony",
     clump = list(p1 = 1e-5, p2 = 1e-5, r2 = 0.2, kb = 500),
     coloc_settings = list(
-      pp4_threshold = 0.0,
+      pp4_threshold = 0.7,
       susie_threshold = 0.0,
       min_snps = 5,
       min_snps_susie = 5,
@@ -471,7 +479,8 @@ easycoloc_write_demo_configs <- function(project_dir) {
       pos = "pos",
       pval = "pval_nominal",
       beta = "slope",
-      se = "slope_se"
+      se = "slope_se",
+      af = "af"
     )
   )
   yaml::write_yaml(qtl_cfg, file.path(project_dir, "config", "qtl.yaml"))
@@ -520,27 +529,33 @@ easycoloc_bootstrap_demo <- function(dest_dir, force = FALSE, run_pipeline = FAL
     "This project is self-contained and should finish in under 2 minutes on a normal workstation.",
     "",
     "Run:",
-    sprintf("bash %s run --global %s --gwas %s --qtl %s",
-            shQuote(file.path(normalizePath(getwd(), mustWork = FALSE), "easycoloc")),
-            shQuote(file.path(project_dir, "config", "global.yaml")),
-            shQuote(file.path(project_dir, "config", "gwas.yaml")),
-            shQuote(file.path(project_dir, "config", "qtl.yaml"))),
+    sprintf(
+      "bash %s run --global %s --gwas %s --qtl %s",
+      shQuote(file.path(normalizePath(getwd(), mustWork = FALSE), "easycoloc")),
+      shQuote(file.path(project_dir, "config", "global.yaml")),
+      shQuote(file.path(project_dir, "config", "gwas.yaml")),
+      shQuote(file.path(project_dir, "config", "qtl.yaml"))
+    ),
     "",
     "Or from the EasyColoc repo root:",
-    sprintf("./easycoloc run --global %s --gwas %s --qtl %s",
-            shQuote(file.path(project_dir, "config", "global.yaml")),
-            shQuote(file.path(project_dir, "config", "gwas.yaml")),
-            shQuote(file.path(project_dir, "config", "qtl.yaml")))
+    sprintf(
+      "./easycoloc run --global %s --gwas %s --qtl %s",
+      shQuote(file.path(project_dir, "config", "global.yaml")),
+      shQuote(file.path(project_dir, "config", "gwas.yaml")),
+      shQuote(file.path(project_dir, "config", "qtl.yaml"))
+    )
   )
   writeLines(demo_readme, file.path(project_dir, "DEMO.md"))
 
   if (isTRUE(run_pipeline)) {
     easycoloc_run_command(
       "bash",
-      c("easycoloc", "run",
+      c(
+        "easycoloc", "run",
         "--global", file.path(project_dir, "config", "global.yaml"),
         "--gwas", file.path(project_dir, "config", "gwas.yaml"),
-        "--qtl", file.path(project_dir, "config", "qtl.yaml")),
+        "--qtl", file.path(project_dir, "config", "qtl.yaml")
+      ),
       fail_message = "Toy demo pipeline execution failed."
     )
   }
@@ -819,8 +834,10 @@ easycoloc_build_gtex_summary <- function(sample_attributes_file,
   summary_dt[, Number_of_sigpheno := NA_integer_]
   setcolorder(
     summary_dt,
-    c("Tissue", "NumberRNASeqandGTSamples", "NumberRNASeqSamples", "Number_of_sigpheno",
-      "allPairsTabixFilename", "sigPairsTabixFilename", "tissue_slug")
+    c(
+      "Tissue", "NumberRNASeqandGTSamples", "NumberRNASeqSamples", "Number_of_sigpheno",
+      "allPairsTabixFilename", "sigPairsTabixFilename", "tissue_slug"
+    )
   )
   fwrite(summary_dt[, !c("all_file", "sig_file")], output_file)
   output_file

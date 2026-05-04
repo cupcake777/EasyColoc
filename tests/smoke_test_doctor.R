@@ -4,11 +4,24 @@ suppressPackageStartupMessages({
   library(yaml)
 })
 
+source("src/utils_config.R")
+
 assert_true <- function(condition, message) {
   if (!isTRUE(condition)) {
     stop(message, call. = FALSE)
   }
 }
+
+env_root <- tempfile(pattern = "easycoloc_env_root_")
+Sys.setenv(EASYCOLOC_SMOKE_ROOT = env_root)
+expanded_paths <- easycoloc_expand_env_vars(c(
+  "$EASYCOLOC_SMOKE_ROOT/ref",
+  "${EASYCOLOC_SMOKE_ROOT}/data",
+  "plain/path"
+))
+assert_true(identical(expanded_paths[[1]], file.path(env_root, "ref")), "bare env var expansion failed")
+assert_true(identical(expanded_paths[[2]], file.path(env_root, "data")), "braced env var expansion failed")
+assert_true(identical(expanded_paths[[3]], "plain/path"), "plain path should not be rewritten")
 
 tmp_dir <- tempfile(pattern = "easycoloc_doctor_")
 dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)

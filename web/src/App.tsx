@@ -55,6 +55,8 @@ export default function App() {
   const topRows = topHits(filteredRows, 5);
   const heartbeatStage = formatHeartbeatStage(payload?.runtime.heartbeat);
   const heartbeatMessage = formatHeartbeatMessage(payload?.runtime.heartbeat);
+  const plotCount = payload?.assets.plots.length ?? 0;
+  const downloadCount = payload?.assets.downloads.length ?? 0;
 
   useEffect(() => {
     if (!payload) {
@@ -111,12 +113,18 @@ export default function App() {
             <p className="eyebrow">EasyColoc Report</p>
             <h1>{payload.meta.project_name}</h1>
             <p className="subtitle">
-              Browse coloc summary metrics, rank loci by PP4, and inspect one signal at a time.
+              Publication-ready colocalization review with ranked PP4 signals, locus drill-downs,
+              run provenance, and indexed outputs in one browser view.
             </p>
+            <div className="hero__actions" aria-label="Report highlights">
+              <span>ABF + SuSiE</span>
+              <span>Build-aware references</span>
+              <span>Interactive QC</span>
+            </div>
           </div>
           <dl className="hero__meta">
             <div>
-              <dt>Results Dir</dt>
+              <dt>Results</dt>
               <dd>{payload.meta.results_dir}</dd>
             </div>
             <div>
@@ -128,6 +136,26 @@ export default function App() {
               <dd>{payload.meta.report_version}</dd>
             </div>
           </dl>
+        </div>
+        <div className="hero__visual" aria-label="Report overview">
+          <div className="signal-card signal-card--primary">
+            <span>Mean PP4</span>
+            <strong>{formatPp4(payload.summary.mean_pp4)}</strong>
+            <small>{payload.summary.significant_pp4_08} signals at PP4 &gt;= 0.80</small>
+          </div>
+          <div className="signal-card">
+            <span>Indexed Plots</span>
+            <strong>{plotCount}</strong>
+            <small>{downloadCount} downloadable outputs</small>
+          </div>
+          <div className="signal-bars" aria-hidden="true">
+            <i style={{ height: "42%" }} />
+            <i style={{ height: "68%" }} />
+            <i style={{ height: "36%" }} />
+            <i style={{ height: "84%" }} />
+            <i style={{ height: "58%" }} />
+            <i style={{ height: "92%" }} />
+          </div>
         </div>
         <div className="hero__status">
           {heartbeatStage ? <p className="runtime-pill">Run status: {heartbeatStage}</p> : null}
