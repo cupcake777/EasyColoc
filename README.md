@@ -11,7 +11,7 @@ optional SuSiE follow-up, then writes tables, locus plots, RDS bundles, runtime
 state, and an HTML report.
 
 <p align="center">
-  <img src="docs/assets/synthetic_locus_demo.png" alt="EasyColoc synthetic locus report panel" width="920">
+  <img src="docs/assets/synthetic_locus_demo.png" alt="EasyColoc synthetic locus panel" width="540">
 </p>
 
 ## What It Does
@@ -35,15 +35,13 @@ state, and an HTML report.
 | `config/` | Portable example configs and metadata tables |
 | `templates/project/` | Files copied by `./easycoloc init` |
 | `tests/` | Parse checks, smoke tests, and small fixtures |
-| `docs/` | Tutorial, architecture, reference setup, Docker notes, and layout notes |
+| `docs/` | Tutorial, architecture, reference setup, and Docker notes |
 | `examples/` | Minimal synthetic plotting demo |
 | `web/` | Local interactive report UI source |
 
 Local run artifacts are ignored by git and may appear after analysis:
 `results/`, `temp/`, `harmony/`, `logs/`, `config/local/`, `web/dist/`, and
 `web/node_modules/`.
-
-See [docs/REPO_LAYOUT.md](docs/REPO_LAYOUT.md) for the detailed layout.
 
 ## Install
 
@@ -157,7 +155,6 @@ output directory.
 ## Documentation
 
 - [Tutorial](docs/TUTORIAL.md)
-- [Repository layout](docs/REPO_LAYOUT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Reference data](docs/REFERENCE_DATA.md)
 - [Reference compatibility](docs/REFERENCE_COMPATIBILITY.md)
