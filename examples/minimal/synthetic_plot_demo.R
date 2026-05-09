@@ -1,8 +1,41 @@
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
-  library(ggplot2)
+  library(yaml)
 })
+
+utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
+invisible(lapply(utils_files, source))
+
+cfg_global <- yaml::read_yaml("config/global.yaml")
+fixture_dir <- file.path("tests", "fixtures")
+
+resolve_existing_file <- function(paths) {
+  paths <- Filter(function(path) !is.null(path) && nzchar(path), paths)
+  for (path in paths) {
+    if (file.exists(path)) return(path)
+  }
+  NULL
+}
+
+resolve_recomb_prefix <- function(prefixes, chrom = "1") {
+  prefixes <- Filter(function(path) !is.null(path) && nzchar(path), prefixes)
+  for (prefix in prefixes) {
+    txt_path <- paste0(prefix, "_recombination_map_hapmap_format_hg38_chr_", chrom, ".txt")
+    bed_path <- paste0(prefix, "_recombination_map_hg38_chr_", chrom, ".bed")
+    if (file.exists(txt_path) || file.exists(bed_path)) return(prefix)
+  }
+  NULL
+}
+
+gtf_path <- resolve_existing_file(c(
+  file.path(fixture_dir, "annotation", "smoke_hg38_chr1.gtf"),
+  cfg_global$gene_anno
+))
+recomb_path <- resolve_recomb_prefix(c(
+  file.path(fixture_dir, "recomb", "hg38", "CHB", "CHB"),
+  cfg_global$recom
+))
 
 make_synthetic_locus <- function() {
   set.seed(20260327)
@@ -15,7 +48,7 @@ make_synthetic_locus <- function() {
   signal_p <- c(2e-6, 8e-7, 2e-8, 7e-8, 3e-6, 9e-6)
   signal_rs <- c("rs2819340", "rs3791138", "rs10890255", "rs3791137", "rs2004899", "rs2819341")
 
-  df <- data.frame(
+  data.frame(
     rsid = c(paste0("rsBG", seq_len(n_bg)), signal_rs),
     CHR.qtl = "chr1",
     POS.qtl = c(bg_pos, signal_pos),
@@ -23,95 +56,46 @@ make_synthetic_locus <- function() {
     P.gwas = c(runif(n_bg, min = 1e-3, max = 0.2), c(3e-5, 6e-6, 1e-9, 5e-6, 9e-5, 7e-5)),
     stringsAsFactors = FALSE
   )
-
-  df$category <- "Other variants"
-  df$category[df$rsid %in% c("rs2819340", "rs3791138", "rs2004899")] <- "95% CS"
-  df$category[df$rsid == "rs10890255"] <- "Lead SNP"
-  df$category <- factor(df$category, levels = c("Other variants", "95% CS", "Lead SNP"))
-  df$mb <- df$POS.qtl / 1e6
-  df$logp <- -log10(df$P.qtl)
-  df
 }
 
 synthetic_df <- make_synthetic_locus()
-
-palette <- c(
-  "Other variants" = "#8A8F98",
-  "95% CS" = "#0072B2",
-  "Lead SNP" = "#D55E00"
+credible_set <- data.frame(
+  snp = c("rs2819340", "rs3791138", "rs2004899"),
+  SNP.PP.H4 = c(0.42, 0.31, 0.18),
+  stringsAsFactors = FALSE
 )
 
-plot_obj <- ggplot(synthetic_df, aes(x = mb, y = logp)) +
-  geom_hline(yintercept = -log10(5e-6), linewidth = 0.25, linetype = "22", color = "#B8B8B8") +
-  annotate("segment", x = 43.46, xend = 43.51, y = -0.38, yend = -0.38,
-           linewidth = 1.6, lineend = "round", color = "#222222") +
-  annotate("text", x = 43.512, y = -0.38, label = "CCDC30", hjust = 0, size = 1.75, color = "#222222") +
-  geom_point(
-    aes(fill = category, size = category),
-    shape = 21,
-    stroke = 0.25,
-    color = "white",
-    alpha = 0.96
-  ) +
-  scale_fill_manual(values = palette, name = NULL) +
-  scale_size_manual(values = c("Other variants" = 1.5, "95% CS" = 2.2, "Lead SNP" = 2.8), guide = "none") +
-  scale_x_continuous(
-    breaks = c(43.2, 43.4, 43.6),
-    labels = c("43.2", "43.4", "43.6"),
-    expand = expansion(mult = c(0.01, 0.02))
-  ) +
-  scale_y_continuous(
-    limits = c(-0.58, 8.2),
-    breaks = c(0, 2, 4, 6, 8),
-    expand = expansion(mult = c(0, 0.03))
-  ) +
-  labs(
-    title = "CCDC30 locus",
-    x = "Position on chr1 (Mb)",
-    y = expression(-log[10](QTL~italic(P)))
-  ) +
-  guides(fill = guide_legend(override.aes = list(size = c(2.2, 2.6, 3.0), alpha = 1))) +
-  theme_classic(base_size = 6.8) +
-  theme(
-    plot.title = element_text(size = 7.8, face = "bold", margin = margin(b = 2)),
-    axis.title = element_text(size = 6.8),
-    axis.text = element_text(size = 6.0, color = "#333333"),
-    axis.line = element_line(linewidth = 0.3, color = "#333333"),
-    axis.ticks = element_line(linewidth = 0.25, color = "#333333"),
-    legend.position = "inside",
-    legend.position.inside = c(0.03, 0.96),
-    legend.justification.inside = c(0, 1),
-    legend.direction = "vertical",
-    legend.background = element_blank(),
-    legend.key = element_blank(),
-    legend.text = element_text(size = 5.8),
-    legend.spacing.y = unit(0.5, "pt"),
-    plot.margin = margin(4, 5, 4, 5)
-  ) +
-  coord_cartesian(clip = "off")
+assign("lead_SNP", "rs10890255", envir = .GlobalEnv)
+assign("geneSymbol", "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+", envir = .GlobalEnv)
+assign("plink_bfile", NULL, envir = .GlobalEnv)
+assign("trait", "SMOKE_GWAS", envir = .GlobalEnv)
 
-output_dir <- file.path("examples", "minimal", "output")
+plot_obj <- plot_qtl_association(
+  qtl_all_chrom = "CHR.qtl",
+  qtl_all_pvalue = "P.qtl",
+  leadSNP_DF = synthetic_df,
+  ld_df = NULL,
+  gtf_path = gtf_path,
+  region_recomb = NULL,
+  recomb_path = recomb_path,
+  show_lead_line = FALSE,
+  qtl_type = "postnatal",
+  phenotype_info = "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+",
+  credible_set = credible_set,
+  plot_window_bp = 200000
+)
+
+output_dir <- "examples/minimal/output"
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
-pdf_path <- file.path(output_dir, "synthetic_locus_demo.pdf")
-png_path <- file.path(output_dir, "synthetic_locus_demo.png")
-
-ggsave(
-  filename = pdf_path,
-  plot = plot_obj,
-  width = 3.25,
-  height = 1.95,
-  device = cairo_pdf,
-  bg = "white"
+save_res <- save_plot_with_fallback(
+  plot_obj = plot_obj,
+  pdf_path = file.path(output_dir, "synthetic_locus_demo.pdf"),
+  png_path = file.path(output_dir, "synthetic_locus_demo.png"),
+  plot_width = 6.6,
+  plot_height = 4.9,
+  png_scale = 1,
+  png_dpi = 240
 )
 
-ggsave(
-  filename = png_path,
-  plot = plot_obj,
-  width = 3.25,
-  height = 1.95,
-  dpi = 300,
-  bg = "white"
-)
-
-message("[DEMO] Saved compact synthetic panel to: ", png_path)
+message("[DEMO] Saved minimal synthetic panel to: ", save_res$path)
