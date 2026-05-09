@@ -161,7 +161,7 @@ validate environment
 
 ```mermaid
 flowchart TD
-    A[GWAS summary statistics<br/>hg19 or hg38] --> B[Harmonization layer<br/>gwaslab plus fallback]
+    A[GWAS summary statistics<br/>hg19 or hg38] --> B[Harmonization layer<br/>native EasyColoc]
     B --> C[Locus discovery<br/>PLINK clump]
     C --> D[QTL sigPairs prefilter<br/>skip empty datasets fast]
     C --> E[QTL allPairs regional query]
@@ -194,9 +194,36 @@ matched gene-track coordinates.
 | `./easycoloc monitor /path/to/output_dir` | Print the latest runtime heartbeat and output snapshot |
 | `./easycoloc watch /path/to/output_dir 60 logs/monitor/my_run.log` | Append periodic monitor snapshots to a local log |
 | `./easycoloc manifest /path/to/output_dir` | Build an output manifest for an existing results directory |
+| `./easycoloc harmony-qc --global config/global.yaml --gwas config/gwas.yaml --output-dir results/harmony_qc` | Build an HTML QC report for harmonized GWAS caches |
 | `./easycoloc refs --include-qtl-files` | Inspect required and optional references |
 | `./easycoloc bootstrap-refs ...` | Materialize local references or demo assets |
 | `./easycoloc smoke` | Run the standard local smoke suite |
+
+## Harmonized GWAS QC
+
+EasyColoc writes reusable harmonized GWAS caches that can feed coloc, SMR, and
+sLDSC conversion. The canonical cache schema keeps both identifier systems:
+
+- `SNPID`: primary identifier, using rsID when available and `variant_id` as a fallback
+- `rsID`: explicit dbSNP rsID column, `NA` when unresolved
+- `variant_id`: explicit `chr:POS:NEA:EA` identifier
+- `CHR POS EA NEA EAF BETA SE P N STATUS ...`
+
+Run the QC report after generating or regenerating caches:
+
+```bash
+./easycoloc harmony-qc \
+  --global config/global.yaml \
+  --gwas config/gwas.yaml \
+  --output-dir results/harmony_qc \
+  --sample-n 200000 \
+  --dbsnp-sample-n 5000
+```
+
+The report writes `harmony_QC_report.html`, a summary TSV, per-variant basic QC
+flags, and sampled dbSNP position mismatches. The dbSNP check is a report-only
+reference concordance audit; it is not part of the production harmonization
+path.
 
 ## Repository Layout
 

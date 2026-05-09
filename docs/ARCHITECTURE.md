@@ -35,7 +35,7 @@ flowchart LR
 ### 1. Harmonization
 
 - Implemented in `run_coloc.r` and `src/utils_format.R`
-- Uses `gwaslab` when reference assets are available
+- Uses native EasyColoc harmonization when reference assets are available
 - Supports fallback handling for liftOver-related failure paths
 - Keeps build-aware reference selection explicit
 
@@ -135,6 +135,6 @@ can inspect existing result directories without rerunning colocalization.
 
 ## What Is Deliberately Not In Scope
 
-- full GWAS munging feature parity with gwaslab
+- full GWAS munging coverage for common summary-statistic formats
 - storage of large reference assets inside the repository
 - implicit magic around build inference when explicit configuration is safer

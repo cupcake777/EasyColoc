@@ -411,7 +411,6 @@ easycoloc_write_demo_configs <- function(project_dir) {
       write_task_events = TRUE
     ),
     harmonization_settings = list(
-      env_name = "gwaslab",
       liftover_chain = ""
     ),
     plot_settings = list(

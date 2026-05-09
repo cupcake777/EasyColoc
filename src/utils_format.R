@@ -213,7 +213,7 @@ add_variant_id <- function(df, chr_col = "CHR", pos_col = "POS", allele1_col = "
   return(df)
 }
 
-format_sumstats <- function(df, type, col_map, case_control = FALSE) {
+format_sumstats <- function(df, type, col_map, case_control = FALSE, sample_size_n = NULL) {
   df_std <- as.data.table(copy(df))
 
   target_names <- c(
@@ -243,8 +243,91 @@ format_sumstats <- function(df, type, col_map, case_control = FALSE) {
   if (case_control && "BETA" %notin% names(df_std) && "OR" %in% names(df_std)) {
     df_std[, BETA := log(OR)]
   }
+  if (("N" %notin% names(df_std) || all(is.na(df_std$N))) &&
+      !is.null(sample_size_n) &&
+      !is.na(suppressWarnings(as.numeric(sample_size_n)))) {
+    df_std <- data.table::setalloccol(df_std)
+    df_std[, N := as.numeric(sample_size_n)]
+  }
 
   return(df_std)
+}
+
+easycoloc_standardize_harmonized_gwas <- function(dt, sample_size_n = NULL) {
+  res <- as.data.table(copy(dt))
+  rename_first <- function(candidates, target) {
+    hit <- intersect(candidates, names(res))[1]
+    if (!is.na(hit) && nzchar(hit) && hit != target) {
+      if (target %in% names(res)) {
+        res[, (hit) := NULL]
+      } else {
+        data.table::setnames(res, hit, target)
+      }
+    }
+  }
+
+  original_id_col <- intersect(c("SNPID", "rsID", "rsid", "SNP", "ID"), names(res))[1]
+  if (!is.na(original_id_col) && nzchar(original_id_col) && original_id_col != "SNPID") {
+    if ("SNPID" %in% names(res)) {
+      res[, (original_id_col) := NULL]
+    } else {
+      data.table::setnames(res, original_id_col, "SNPID")
+    }
+  }
+  rename_first(c("CHR", "CHROM", "chrom", "chromosome"), "CHR")
+  rename_first(c("POS", "BP", "pos", "base_pair_location"), "POS")
+  rename_first(c("EA", "A1", "effect_allele", "EFFECT_ALLELE"), "EA")
+  rename_first(c("NEA", "A2", "other_allele", "OTHER_ALLELE"), "NEA")
+  rename_first(c("EAF", "AF", "MAF", "effect_allele_frequency"), "EAF")
+  rename_first(c("BETA", "beta"), "BETA")
+  rename_first(c("SE", "standard_error", "se"), "SE")
+  rename_first(c("P", "PVAL", "p_value", "pval"), "P")
+  rename_first(c("N", "n", "TotalN", "N_analyzed"), "N")
+
+  if ("CHR" %in% names(res)) {
+    res[, CHR := gsub("^chr", "", as.character(CHR), ignore.case = TRUE)]
+  }
+  if ("POS" %in% names(res)) {
+    res[, POS := as.integer(POS)]
+  }
+  for (allele_col in intersect(c("EA", "NEA"), names(res))) {
+    res[, (allele_col) := toupper(as.character(get(allele_col)))]
+  }
+  for (num_col in intersect(c("EAF", "BETA", "SE", "P", "N"), names(res))) {
+    res[, (num_col) := as.numeric(get(num_col))]
+  }
+  if (("N" %notin% names(res) || all(is.na(res$N))) &&
+      !is.null(sample_size_n) &&
+      !is.na(suppressWarnings(as.numeric(sample_size_n)))) {
+    res[, N := as.numeric(sample_size_n)]
+  }
+  if (all(c("CHR", "POS", "NEA", "EA") %in% names(res))) {
+    res[, variant_id := paste0("chr", gsub("^chr", "", CHR, ignore.case = TRUE), ":", POS, ":", NEA, ":", EA)]
+  }
+  if ("rsID" %notin% names(res)) {
+    res[, rsID := NA_character_]
+  }
+  if ("SNPID" %in% names(res)) {
+    snpid_chr <- as.character(res$SNPID)
+    rsid_from_snpid <- is.na(res$rsID) & grepl("^rs[0-9]+$", snpid_chr, ignore.case = TRUE)
+    res[rsid_from_snpid, rsID := snpid_chr[rsid_from_snpid]]
+    if ("variant_id" %in% names(res)) {
+      res[is.na(rsID) & snpid_chr == variant_id, rsID := NA_character_]
+    }
+  }
+  if ("SNPID" %notin% names(res)) {
+    res[, SNPID := if ("rsID" %in% names(res)) rsID else NA_character_]
+  }
+  if ("variant_id" %in% names(res)) {
+    res[is.na(SNPID) | !nzchar(as.character(SNPID)), SNPID := variant_id]
+  }
+  if ("rsID" %in% names(res)) {
+    res[!is.na(rsID) & nzchar(as.character(rsID)) & grepl("^rs[0-9]+$", as.character(rsID), ignore.case = TRUE), SNPID := as.character(rsID)]
+  }
+
+  preferred <- c("SNPID", "rsID", "variant_id", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P", "N")
+  data.table::setcolorder(res, c(intersect(preferred, names(res)), setdiff(names(res), preferred)))
+  res
 }
 
 easycoloc_normalize_build <- function(build) {
@@ -739,12 +822,12 @@ run_easycoloc_harmonization <- function(sumstats_dt,
                                         source_build = "19",
                                         target_build = "38",
                                         n_threads = 4,
-                                        env_name = "gwaslab",
                                         save_dir = NULL,
                                         dataset_id = NULL,
                                         input_file = NULL,
                                         verbose = TRUE,
-                                        liftover_chain = NULL) {
+                                        liftover_chain = NULL,
+                                        sample_size_n = NULL) {
   log_message <- function(..., verbose = TRUE) {
     if (isTRUE(verbose)) message(...)
   }
@@ -763,25 +846,37 @@ run_easycoloc_harmonization <- function(sumstats_dt,
       ref_mtime <- if (file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
       input_mtime <- if (!is.null(source_file) && file.exists(source_file)) file.info(source_file)$mtime else NA
       dep_mtime <- max(c(ref_mtime, input_mtime), na.rm = TRUE)
-      cache_ok <- cache_size_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
+      required_cache_cols <- c("SNPID", "rsID", "variant_id", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P", "N")
+      cache_header <- if (cache_size_ok) {
+        tryCatch(names(data.table::fread(final_output_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
+      } else {
+        character()
+      }
+      cache_schema_ok <- all(required_cache_cols %in% cache_header)
+      cache_ok <- cache_size_ok && cache_schema_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
       if (cache_ok) {
         log_message(glue("Found cached harmonized file: {final_output_file}"), verbose = verbose)
-        return(data.table::fread(final_output_file))
+        cached_dt <- data.table::fread(final_output_file)
+        return(easycoloc_standardize_harmonized_gwas(cached_dt, sample_size_n = sample_size_n))
       }
-      log_message(glue("Cached file is outdated or empty: {final_output_file}"), verbose = verbose)
+      if (!cache_schema_ok) {
+        log_message(glue("Cached file lacks canonical harmony schema and will be regenerated: {final_output_file}"), verbose = verbose)
+      } else {
+        log_message(glue("Cached file is outdated or empty: {final_output_file}"), verbose = verbose)
+      }
     }
   }
 
-  res_dt <- as.data.table(copy(sumstats_dt))
+  res_dt <- easycoloc_standardize_harmonized_gwas(sumstats_dt, sample_size_n = sample_size_n)
   if ("CHR" %in% names(res_dt)) res_dt[, CHR := gsub("^chr", "", as.character(CHR), ignore.case = TRUE)]
   if ("POS" %in% names(res_dt)) res_dt[, POS := as.integer(POS)]
   for (allele_col in intersect(c("EA", "NEA"), names(res_dt))) {
     res_dt[, (allele_col) := toupper(as.character(get(allele_col)))]
   }
-  if ("SNPID" %notin% names(res_dt) && all(c("CHR", "POS", "NEA", "EA") %in% names(res_dt))) {
+  if ("variant_id" %notin% names(res_dt) && all(c("CHR", "POS", "NEA", "EA") %in% names(res_dt))) {
     res_dt <- add_variant_id(res_dt, chr_col = "CHR", pos_col = "POS", allele1_col = "NEA", allele2_col = "EA")
-    data.table::setnames(res_dt, "variant_id", "SNPID")
     if ("variant_id_flip" %in% names(res_dt)) res_dt[, variant_id_flip := NULL]
+    if ("SNPID" %notin% names(res_dt)) res_dt[, SNPID := variant_id]
   }
 
   if (!is.null(ref_fasta) && nzchar(ref_fasta) && file.exists(ref_fasta)) {
@@ -821,9 +916,11 @@ run_easycoloc_harmonization <- function(sumstats_dt,
     verbose = verbose
   )
 
-  if (all(c("CHR", "POS", "NEA", "EA") %in% names(res_dt))) {
-    res_dt[, SNPID := paste0("chr", gsub("^chr", "", CHR, ignore.case = TRUE), ":", POS, ":", NEA, ":", EA)]
+  if (("variant_id" %notin% names(res_dt) || all(is.na(res_dt$variant_id) | !nzchar(as.character(res_dt$variant_id)))) &&
+      all(c("CHR", "POS", "NEA", "EA") %in% names(res_dt))) {
+    res_dt[, variant_id := paste0("chr", gsub("^chr", "", CHR, ignore.case = TRUE), ":", POS, ":", NEA, ":", EA)]
   }
+  res_dt <- easycoloc_standardize_harmonized_gwas(res_dt, sample_size_n = sample_size_n)
   easycoloc_validate_harmonized(res_dt, verbose = verbose)
   log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(res_dt)}"), verbose = verbose)
   if (use_cache) {
@@ -833,372 +930,10 @@ run_easycoloc_harmonization <- function(sumstats_dt,
   res_dt
 }
 
-run_gwaslab_harmonization <- function(...) {
-  use_gwaslab <- tolower(Sys.getenv("EASYCOLOC_USE_GWASLAB", unset = "false")) %in% c("1", "true", "yes")
-  if (isTRUE(use_gwaslab)) {
-    return(run_gwaslab_harmonization_legacy(...))
-  }
-  run_easycoloc_harmonization(...)
-}
-
-run_gwaslab_harmonization_legacy <- function(sumstats_dt,
-                                             ref_fasta,
-                                             ref_vcf = NULL,
-                                             ref_dbsnp = NULL,
-                                             ref_alt_freq = "AF",
-                                             source_build = "19",
-                                             target_build = "38",
-                                             n_threads = 4,
-                                             env_name = "gwaslab",
-                                             save_dir = NULL,
-                                             dataset_id = NULL,
-                                             input_file = NULL,
-                                             verbose = TRUE,
-                                             liftover_chain = NULL) { # Added liftover_chain parameter
-
-  log_message <- function(..., verbose = TRUE) {
-    if (isTRUE(verbose)) {
-      message(...)
-    }
-  }
-  log_message("--- Starting Harmonization & LiftOver ---", verbose = verbose)
-
-  normalize_ref_infer <- function(path) {
-    if (is.null(path) || !nzchar(path)) {
-      return("NULL")
-    }
-    if (grepl("\\.(vcf|bcf)(\\.gz)?$", path, ignore.case = TRUE)) {
-      return(path)
-    }
-    log_message(
-      glue(
-        "[GWASLab] Skipping ref_infer because the reference is not a VCF/BCF file: {path}"
-      ),
-      verbose = verbose
-    )
-    "NULL"
-  }
-
-  has_high_confidence_rsid <- function(dt, sample_n = 20000L, min_frac = 0.95) {
-    candidate_cols <- intersect(c("rsid", "SNP", "SNPID", "snp"), names(dt))
-    if (length(candidate_cols) == 0) {
-      return(FALSE)
-    }
-
-    snp_vals <- dt[[candidate_cols[[1]]]]
-    snp_vals <- as.character(snp_vals)
-    snp_vals <- snp_vals[!is.na(snp_vals) & nzchar(snp_vals)]
-    if (length(snp_vals) == 0) {
-      return(FALSE)
-    }
-
-    if (length(snp_vals) > sample_n) {
-      snp_vals <- snp_vals[seq_len(sample_n)]
-    }
-
-    mean(grepl("^rs[0-9]+$", snp_vals, ignore.case = TRUE)) >= min_frac
-  }
-
-  if (!file.exists(ref_fasta)) {
-    warning(glue("Reference FASTA not found: {ref_fasta}. Skipping harmonization."))
-    return(sumstats_dt)
-  }
-
-  source_file <- input_file
-
-  use_cache <- !is.null(save_dir) && !is.null(dataset_id)
-  final_output_file <- NULL
-
-  if (use_cache) {
-    if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
-    ref_name <- tools::file_path_sans_ext(basename(ref_fasta))
-    # Cache filename includes build info
-    final_output_file <- file.path(save_dir, glue("{dataset_id}_b{source_build}to{target_build}_harmonized.tsv"))
-
-    if (file.exists(final_output_file)) {
-      cache_info <- file.info(final_output_file)
-      cache_mtime <- cache_info$mtime
-      cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
-      ref_mtime <- file.info(ref_fasta)$mtime
-      input_mtime <- if (!is.null(source_file) && file.exists(source_file)) {
-        file.info(source_file)$mtime
-      } else {
-        NA
-      }
-      dep_mtime <- max(c(ref_mtime, input_mtime), na.rm = TRUE)
-      cache_ok <- cache_size_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
-      if (cache_ok) {
-        log_message(glue("Found cached harmonized file: {final_output_file}"), verbose = verbose)
-        log_message("Loading from cache...", verbose = verbose)
-        return(fread(final_output_file))
-      }
-      log_message(glue("Cached file is outdated or empty: {final_output_file}"), verbose = verbose)
-    }
-  }
-
-  temp_dir <- file.path("temp", "gwaslab")
-  log_dir <- file.path("logs", "gwaslab")
-  if (!dir.exists(temp_dir)) dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
-
-  temp_id <- paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_", Sys.getpid())
-  input_tmp_file <- file.path(temp_dir, glue("temp_gwas_in_{temp_id}.tsv"))
-  output_file <- if (use_cache) final_output_file else file.path(temp_dir, glue("temp_gwas_out_{temp_id}.tsv"))
-  py_script_file <- file.path(temp_dir, glue("run_gwaslab_{temp_id}.py"))
-
-  on.exit(
-    {
-      if (exists("gwaslab_success", inherits = FALSE) && isTRUE(gwaslab_success)) {
-        if (file.exists(input_tmp_file)) file.remove(input_tmp_file)
-        if (file.exists(py_script_file)) file.remove(py_script_file)
-        if (!use_cache && file.exists(output_file)) file.remove(output_file)
-      }
-    },
-    add = TRUE
-  )
-
-  fwrite(sumstats_dt, input_tmp_file, sep = "\t", na = "NA", quote = FALSE)
-
-  # Build VCF path pattern for strand inference
-  vcf_pattern <- normalize_ref_infer(ref_vcf)
-  dbsnp_pattern <- if (!is.null(ref_dbsnp) && nzchar(ref_dbsnp)) ref_dbsnp else "NULL"
-  should_skip_rsid_vcf <- nrow(sumstats_dt) >= 1e5 || has_high_confidence_rsid(sumstats_dt)
-  if (!identical(dbsnp_pattern, "NULL") && should_skip_rsid_vcf) {
-    log_message(
-      "[GWASLab] Skipping dbSNP VCF rsID reassignment; GWASLab standard VCF assignment is not suitable for large inputs.",
-      verbose = verbose
-    )
-    dbsnp_pattern <- "NULL"
-  }
-
-  # Build Python script as a single string to avoid paste0 quote issues
-  chain_pattern <- if (!is.null(liftover_chain) && nzchar(liftover_chain) && file.exists(liftover_chain)) liftover_chain else "NULL"
-
-  py_script <- sprintf(
-    '
-import gwaslab as gl
-import pandas as pd
-import numpy as np
-import sys
-
-try:
-    # Loading sumstats with GWASLab...
-    mysumstats = gl.Sumstats("%s", fmt="gwaslab", build="%s")
-    mysumstats.basic_check()
-
-    # Clean numeric columns to prevent type errors in GWASLab
-    for col in mysumstats.data.columns:
-        if mysumstats.data[col].dtype == "object":
-            numeric_converted = pd.to_numeric(mysumstats.data[col], errors="coerce")
-            if numeric_converted.notna().mean() > 0.1:
-                mysumstats.data[col] = numeric_converted
-
-    ref_seq = "%s"
-    ref_rsid_vcf = "%s"
-    ref_infer = "%s"  # Direct path to TSV file (no {chr} pattern needed)
-    ref_af = "%s"
-    liftover_chain = "%s"
-    src_b = "%s"
-    tgt_b = "%s"
-    if ref_rsid_vcf in ("", "NULL", "None", "NA"):
-        ref_rsid_vcf = "NULL"
-    if ref_infer in ("", "NULL", "None", "NA"):
-        ref_infer = "NULL"
-    harmonize_cores = 1 if ref_rsid_vcf != "NULL" else %d
-
-    # Use the installed GWASLab harmonize() signature.
-    if ref_rsid_vcf != "NULL" or ref_infer != "NULL":
-        # Running GWASLab harmonization...
-        harmonize_kwargs = dict(
-            ref_seq=ref_seq,
-            ref_alt_freq=ref_af,
-            n_cores=harmonize_cores
-        )
-        if ref_rsid_vcf != "NULL":
-            harmonize_kwargs["ref_rsid_vcf"] = ref_rsid_vcf
-        if ref_infer != "NULL":
-            harmonize_kwargs["ref_infer"] = ref_infer
-        mysumstats.harmonize(**harmonize_kwargs)
-
-    # Perform LiftOver if needed
-    if src_b != tgt_b:
-        # Performing LiftOver...
-        liftover_kwargs = dict(from_build=src_b, to_build=tgt_b, remove=True)
-        if liftover_chain != "NULL":
-            liftover_kwargs["chain"] = liftover_chain
-        mysumstats.liftover(**liftover_kwargs)
-
-    mysumstats.data.to_csv("%s", sep="\\t", index=False, float_format="%%.6g")
-
-except Exception as e:
-    # Error in GWASLab
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
- ', input_tmp_file, source_build,
-    ref_fasta, dbsnp_pattern, vcf_pattern, ref_alt_freq, chain_pattern, source_build, target_build,
-    n_threads,
-    output_file
-  )
-
-  writeLines(py_script, py_script_file)
-
-  stdout_log <- file.path(log_dir, glue("gwaslab_stdout_{temp_id}.log"))
-  stderr_log <- file.path(log_dir, glue("gwaslab_stderr_{temp_id}.log"))
-
-  on.exit(
-    {
-      # Only clean up logs on success; keep them on failure for diagnostics
-      if (exists("gwaslab_success", inherits = FALSE) && isTRUE(gwaslab_success)) {
-        if (file.exists(stdout_log)) file.remove(stdout_log)
-        if (file.exists(stderr_log)) file.remove(stderr_log)
-      }
-    },
-    add = TRUE
-  )
-
-  log_message("Running Python script...", verbose = verbose)
-  micromamba_args <- c("run", "-n", env_name, "python", py_script_file)
-  mamba_root <- Sys.getenv("MAMBA_ROOT_PREFIX", unset = "")
-  if (!nzchar(mamba_root)) {
-    default_mamba_root <- path.expand("~/.local/share/mamba")
-    if (dir.exists(default_mamba_root)) {
-      mamba_root <- default_mamba_root
-    }
-  }
-  if (nzchar(mamba_root)) {
-    micromamba_args <- c("run", "-r", mamba_root, "-n", env_name, "python", py_script_file)
-  }
-
-  exit_code <- system2(
-    "micromamba",
-    args = micromamba_args,
-    stdout = stdout_log,
-    stderr = stderr_log
-  )
-  exit_code <- as.integer(exit_code)
-  gwaslab_success <- identical(exit_code, 0L)
-
-  if (exit_code == 0) {
-    if (file.exists(output_file)) {
-      res_dt <- fread(output_file)
-      log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(res_dt)}"), verbose = verbose)
-      log_message(glue("  Output columns: {paste(names(res_dt), collapse=', ')}"), verbose = verbose)
-
-      # Post-harmonization validation
-      n_invalid <- 0
-      if ("P" %in% names(res_dt)) {
-        n_invalid_p <- sum(res_dt$P < 0 | res_dt$P > 1 | is.na(res_dt$P))
-        if (n_invalid_p > 0) {
-          warning(glue("Found {n_invalid_p} invalid P-values (< 0, > 1, or NA) after harmonization"))
-          n_invalid <- n_invalid + n_invalid_p
-        }
-      }
-      if ("SE" %in% names(res_dt)) {
-        n_invalid_se <- sum(res_dt$SE <= 0 | is.na(res_dt$SE))
-        if (n_invalid_se > 0) {
-          warning(glue("Found {n_invalid_se} invalid SE values (<= 0 or NA) after harmonization"))
-          n_invalid <- n_invalid + n_invalid_se
-        }
-      }
-      if ("BETA" %in% names(res_dt) && "SE" %in% names(res_dt) && "P" %in% names(res_dt)) {
-        # Check BETA/SE/P consistency (Z-score should roughly match)
-        res_dt$Z_from_beta <- res_dt$BETA / res_dt$SE
-        res_dt$Z_from_p <- qnorm(res_dt$P / 2, lower.tail = FALSE) * sign(res_dt$BETA)
-        res_dt$Z_diff <- abs(res_dt$Z_from_beta - res_dt$Z_from_p)
-        n_inconsistent <- sum(res_dt$Z_diff > 1.0, na.rm = TRUE) # Allow ~1 Z-score unit tolerance
-        if (n_inconsistent > nrow(res_dt) * 0.05) { # >5% inconsistent = problem
-          warning(glue("Found {n_inconsistent}/{nrow(res_dt)} ({round(n_inconsistent/nrow(res_dt)*100, 1)}%) variants with inconsistent BETA/SE/P after harmonization"))
-        }
-        res_dt$Z_from_beta <- NULL
-        res_dt$Z_from_p <- NULL
-        res_dt$Z_diff <- NULL
-      }
-      if (n_invalid > 0) {
-        warning(glue("Total post-harmonization QC failures: {n_invalid} issues detected"))
-      } else {
-        log_message("Post-harmonization validation: PASS", verbose = verbose)
-      }
-      if (use_cache) log_message(glue("Saved result to: {output_file}"), verbose = verbose)
-      return(res_dt)
-    } else {
-      stop("GWASLab output file missing.")
-    }
-  } else {
-    stderr_lines <- if (file.exists(stderr_log)) readLines(stderr_log, warn = FALSE) else character()
-    stdout_lines <- if (file.exists(stdout_log)) readLines(stdout_log, warn = FALSE) else character()
-    log_message(glue("[GWASLab] micromamba exit code: {exit_code}"), verbose = verbose)
-    root_prefix <- Sys.getenv("MAMBA_ROOT_PREFIX", unset = "")
-    if (nzchar(root_prefix)) {
-      log_message(glue("[GWASLab] MAMBA_ROOT_PREFIX={root_prefix}"), verbose = verbose)
-    }
-    if (length(stderr_lines) > 0) {
-      log_message("[GWASLab] stderr (last 20 lines):", verbose = verbose)
-      for (line in tail(stderr_lines, 20)) {
-        log_message(line, verbose = verbose)
-      }
-    }
-    if (length(stdout_lines) > 0) {
-      log_message("[GWASLab] stdout (last 20 lines):", verbose = verbose)
-      for (line in tail(stdout_lines, 20)) {
-        log_message(line, verbose = verbose)
-      }
-    }
-    # GWASLab failed - try fallback liftOver strategy
-    log_message("[FALLBACK] GWASLab failed, attempting liftOver fallback...", verbose = verbose)
-
-    if (!is.null(liftover_chain) && file.exists(liftover_chain)) {
-      # Extract chromosome and region from sumstats
-      chr_col <- intersect(c("CHR", "chr", "CHROM"), names(sumstats_dt))[1]
-      pos_col <- intersect(c("POS", "pos", "BP", "POSITION"), names(sumstats_dt))[1]
-
-      if (!is.null(chr_col) && !is.null(pos_col)) {
-        chr_val <- as.character(sumstats_dt[[chr_col]][1])
-        chr_clean <- gsub("^chr", "", chr_val)
-        positions <- sumstats_dt[[pos_col]]
-        positions <- positions[!is.na(positions) & positions > 0]
-
-        if (length(positions) > 0) {
-          region_start <- min(positions)
-          region_end <- max(positions)
-
-          log_message(glue("[FALLBACK] Running liftOver on {chr_clean}:{region_start}-{region_end}"), verbose = verbose)
-
-          liftover_res <- run_liftover_fallback(
-            sumstats_dt = sumstats_dt,
-            chrom = chr_clean,
-            start_pos = region_start,
-            end_pos = region_end,
-            liftOver_chain = liftover_chain
-          )
-
-          if (liftover_res$success) {
-            log_message(glue("[FALLBACK] LiftOver successful: {liftover_res$start}-{liftover_res$end}"), verbose = verbose)
-            return(apply_liftover_positions(
-              sumstats_dt = sumstats_dt,
-              chrom = chr_clean,
-              start_pos = region_start,
-              end_pos = region_end,
-              hg38_positions = liftover_res$positions
-            ))
-          } else {
-            log_message("[FALLBACK] LiftOver also failed", verbose = verbose)
-          }
-        }
-      }
-    } else {
-      log_message(glue("[FALLBACK] liftOver chain file not found: {liftover_chain}"), verbose = verbose)
-    }
-
-    stop("GWASLab processing failed and fallback unsuccessful. Check logs above.")
-  }
-}
-
 # =============================================================================
 # run_liftover_fallback: Iterative region contraction LiftOver fallback
 # =============================================================================
-# When gwaslab harmonization fails, use liftOver with iterative region
-# contraction strategy (from ColocQuiaL). Gradually shrinks the region
+# Optional liftOver helper using iterative region contraction. Gradually shrinks the region
 # until successful mapping or region becomes too small.
 #
 # Arguments:
@@ -1451,6 +1186,30 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
   }
   merged_dt <- NULL
   merge_strategy <- "none"
+  fill_snp_from_candidates <- function(dt, candidates, fallback = NULL) {
+    if (is.null(dt) || nrow(dt) == 0) {
+      return(dt)
+    }
+    dt[, snp := NA_character_]
+    for (col in candidates) {
+      if (col %in% names(dt)) {
+        vals <- as.character(dt[[col]])
+        fill_idx <- (is.na(dt$snp) | !nzchar(dt$snp)) & !is.na(vals) & nzchar(vals)
+        if (any(fill_idx)) {
+          dt[fill_idx, snp := vals[fill_idx]]
+        }
+      }
+    }
+    if (!is.null(fallback) && fallback %in% names(dt)) {
+      vals <- as.character(dt[[fallback]])
+      fill_idx <- (is.na(dt$snp) | !nzchar(dt$snp)) & !is.na(vals) & nzchar(vals)
+      if (any(fill_idx)) {
+        dt[fill_idx, snp := vals[fill_idx]]
+      }
+    }
+    dt
+  }
+
   msg("[MERGE] Attempting Strategy 1: rsID direct match...")
   # Use rsID format for matching (after standardization)
   gwas_id_col <- if ("rsid" %in% names(gwas_df)) "rsid" else if ("SNPID" %in% names(gwas_df)) "SNPID" else if ("SNP" %in% names(gwas_df)) "SNP" else "rsid"
@@ -1485,23 +1244,11 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
     )
     merged_dt <- as.data.table(merged_dt)
     merge_strategy <- "rsid_direct"
-    # Priority: rsid.gwas > SNPID.gwas > SNP.gwas > SNPID > SNP
-    # This is critical for SuSiE which needs rsIDs to query PLINK
-    if ("rsid.gwas" %in% names(merged_dt)) {
-      merged_dt$snp <- merged_dt$rsid.gwas
-    } else if ("SNPID.gwas" %in% names(merged_dt)) {
-      merged_dt$snp <- merged_dt$SNPID.gwas
-    } else if ("SNP.gwas" %in% names(merged_dt)) {
-      merged_dt$snp <- merged_dt$SNP.gwas
-    } else if ("rsid" %in% names(merged_dt)) {
-      merged_dt$snp <- merged_dt$rsid
-    } else if ("SNPID" %in% names(merged_dt)) {
-      merged_dt$snp <- merged_dt$SNPID
-    } else if ("SNP" %in% names(merged_dt)) {
-      merged_dt$snp <- merged_dt$SNP
-    } else {
-      merged_dt$snp <- merged_dt[[gwas_id_col]]
-    }
+    merged_dt <- fill_snp_from_candidates(
+      merged_dt,
+      c("rsid.gwas", "SNPID.gwas", "SNP.gwas", "rsid", "SNPID", "SNP"),
+      fallback = gwas_id_col
+    )
   } else {
     msg("[MERGE] ✗ Strategy 1 failed: No rsID overlap")
     merged_dt <- NULL
@@ -1530,27 +1277,11 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         merged_dt <- as.data.table(merged_dt)
         msg(glue("[MERGE] ✓ Strategy 2: {nrow(merged_dt)} SNPs matched"))
         merge_strategy <- "hash_conversion"
-        # Priority: rsid.gwas > SNPID.gwas > SNP.gwas > rsid > SNP > gwas_chrpos_id
-        rsid_col <- if ("rsid.gwas" %in% names(merged_dt)) {
-          "rsid.gwas"
-        } else if ("SNPID.gwas" %in% names(merged_dt)) {
-          "SNPID.gwas"
-        } else if ("SNP.gwas" %in% names(merged_dt)) {
-          "SNP.gwas"
-        } else if ("rsid" %in% names(merged_dt)) {
-          "rsid"
-        } else if ("SNPID" %in% names(merged_dt)) {
-          "SNPID"
-        } else if ("SNP" %in% names(merged_dt)) {
-          "SNP"
-        } else {
-          NULL
-        }
-        if (!is.null(rsid_col)) {
-          merged_dt$snp <- merged_dt[[rsid_col]]
-        } else {
-          setnames(merged_dt, "gwas_chrpos_id", "snp")
-        }
+        merged_dt <- fill_snp_from_candidates(
+          merged_dt,
+          c("rsid.gwas", "SNPID.gwas", "SNP.gwas", "rsid", "SNPID", "SNP"),
+          fallback = "gwas_chrpos_id"
+        )
         snp_sample <- head(merged_dt$snp[!is.na(merged_dt$snp)], 3)
         if (length(snp_sample) > 0 && !all(grepl("^rs", snp_sample))) {
           msg(glue("[MERGE]   Warning: Non-rsID format detected: {paste(snp_sample, collapse=', ')}"))
@@ -1598,17 +1329,13 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
         relationship = "many-to-many"
       )
       merged_flip <- as.data.table(merged_flip)
-      # Mark flipped SNPs and flip BETA values
-      # CRITICAL: Check if gwaslab already flipped these variants to prevent double-flipping
+      # Mark flipped SNPs and flip BETA values.
       if (nrow(merged_flip) > 0) {
         merged_flip$allele_flipped <- TRUE
-        # Check if gwaslab ALLELE_FLIPPED column exists (indicates prior harmonization flips)
         if ("ALLELE_FLIPPED" %in% names(merged_flip)) {
-          # gwaslab tracked flips - check if any were actually flipped
           already_flipped <- any(merged_flip$ALLELE_FLIPPED == TRUE, na.rm = TRUE)
           if (already_flipped) {
-            warning("Detected ALLELE_FLIPPED=TRUE from gwaslab - variants already flipped during harmonization. Skipping downstream flip to prevent double-flipping.")
-            # DO NOT flip BETA - gwaslab already did it
+            warning("Detected ALLELE_FLIPPED=TRUE - variants were already flipped during harmonization. Skipping downstream flip to prevent double-flipping.")
           } else {
             # ALLELE_FLIPPED=FALSE or all NA, safe to flip downstream
             if ("BETA.qtl" %in% names(merged_flip)) {
@@ -1620,7 +1347,6 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
             merged_flip$downstream_flipped <- TRUE
           }
         } else {
-          # No gwaslab tracking column - safe to apply downstream flip
           if ("BETA.qtl" %in% names(merged_flip)) {
             merged_flip$BETA.qtl <- -merged_flip$BETA.qtl
           }
@@ -1638,19 +1364,11 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
       if (nrow(merged_dt) > 0) {
         msg(glue("[MERGE] ✓ Strategy 3: {nrow(merged_dt)} SNPs matched (Forward: {nrow(merged_forward)}, Flipped: {nrow(merged_flip)})"))
         merge_strategy <- "pos_allele"
-        # Priority: use GWAS rsID if available, otherwise use position-based ID
-        # This is critical for SuSiE which needs rsIDs to query PLINK
-        if ("rsid.gwas" %in% names(merged_dt)) {
-          merged_dt$snp <- merged_dt$rsid.gwas
-        } else if ("SNPID.gwas" %in% names(merged_dt)) {
-          merged_dt$snp <- merged_dt$SNPID.gwas
-        } else if ("SNP.gwas" %in% names(merged_dt)) {
-          merged_dt$snp <- merged_dt$SNP.gwas
-        } else if ("SNPID" %in% names(merged_dt)) {
-          merged_dt$snp <- merged_dt$SNPID
-        } else {
-          merged_dt$snp <- merged_dt$variant_id
-        }
+        merged_dt <- fill_snp_from_candidates(
+          merged_dt,
+          c("rsid.gwas", "SNPID.gwas", "SNP.gwas", "SNPID", "SNP", "variant_id"),
+          fallback = "variant_id"
+        )
         snp_sample <- head(merged_dt$snp[!is.na(merged_dt$snp)], 3)
         if (length(snp_sample) > 0 && !all(grepl("^rs", snp_sample))) {
           msg(glue("[MERGE]   Warning: Non-rsID format detected: {paste(snp_sample, collapse=', ')}"))

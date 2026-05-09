@@ -21,6 +21,7 @@ files_to_check <- c(
   "tools/monitor_easycoloc.R",
   "tools/check_run_completion.R",
   "tools/build_output_manifest.R",
+  "tools/build_harmony_qc_report.R",
   "tools/summarize_run_status.R",
   "tests/smoke_test_plotting.R",
   "tests/smoke_test_bootstrap_refs.R",

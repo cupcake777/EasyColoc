@@ -50,7 +50,6 @@ runtime:
   write_task_events: true
 
 harmonization_settings:
-  env_name: "gwaslab"
   liftover_chain: "/ABSOLUTE/PATH/TO/hg19ToHg38.over.chain.gz"
 
 plot_settings:

@@ -20,6 +20,7 @@ Commands:
   monitor    Print the latest runtime heartbeat and output snapshot
   watch      Poll an output directory repeatedly and append snapshots to a log
   manifest   Build an output manifest for an existing results directory
+  harmony-qc Build an HTML QC report for harmonized GWAS caches
   report-web Launch the local interactive web report for an existing results directory
   refs       List required and optional reference resources
   bootstrap-refs  Materialize shared references into a project-local layout
@@ -217,6 +218,9 @@ EOF
     ;;
   manifest)
     exec Rscript tools/build_output_manifest.R "$@"
+    ;;
+  harmony-qc)
+    exec Rscript tools/build_harmony_qc_report.R "$@"
     ;;
   report-web)
     exec "${repo_root}/tools/start_report_web.sh" "$@"

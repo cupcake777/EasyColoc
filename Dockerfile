@@ -80,19 +80,12 @@ RUN R -e "install.packages(c( \
     'susieR', \
     'ggplot2', \
     'ggpubr', \
-    'GenomicRanges', \
     'vroom', \
     'forcats', \
     'purrr', \
     'ggrepel', \
-    'rtracklayer', \
-    'clusterProfiler', \
-    'org.Hs.eg.db', \
     'jsonlite', \
     'tidyr', \
-    'TxDb.Hsapiens.UCSC.hg38.knownGene', \
-    'GenomicFeatures', \
-    'AnnotationDbi', \
     'magrittr', \
     'tibble', \
     'readr', \
@@ -102,6 +95,13 @@ RUN R -e "install.packages(c( \
 # Install Bioconductor packages
 RUN R -e "BiocManager::install(c( \
     'ensembldb', \
+    'GenomicRanges', \
+    'GenomicFeatures', \
+    'AnnotationDbi', \
+    'rtracklayer', \
+    'clusterProfiler', \
+    'org.Hs.eg.db', \
+    'TxDb.Hsapiens.UCSC.hg38.knownGene', \
     'VariantAnnotation', \
     'BSgenome.Hsapiens.UCSC.hg38', \
     'BSgenome.Hsapiens.UCSC.hg19' \
@@ -111,13 +111,12 @@ RUN R -e "BiocManager::install(c( \
 # Python Dependencies
 # =============================================================================
 # Create virtual environment
-RUN python3 -m venv /opt/gwaslab_env
-ENV PATH="/opt/gwaslab_env/bin:$PATH"
+RUN python3 -m venv /opt/easycoloc_py
+ENV PATH="/opt/easycoloc_py/bin:$PATH"
 
-# Install GWASLab and dependencies
+# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir \
-    gwaslab==3.6.3 \
     adjustText \
     biopython \
     gtfparse \

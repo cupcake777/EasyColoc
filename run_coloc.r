@@ -6,7 +6,6 @@ suppressPackageStartupMessages({
   library(parallel)
   library(tools)
   library(glue)
-  library(org.Hs.eg.db)
   library(jsonlite)
 })
 message("==============================================================")
@@ -90,15 +89,6 @@ pvalue_floor <- if (!is.null(cfg_global$coloc_settings$pvalue_floor)) {
 coloc_p1 <- if (!is.null(cfg_global$coloc_settings$p1)) as.numeric(cfg_global$coloc_settings$p1) else 1e-4
 coloc_p2 <- if (!is.null(cfg_global$coloc_settings$p2)) as.numeric(cfg_global$coloc_settings$p2) else 1e-4
 coloc_p12 <- if (!is.null(cfg_global$coloc_settings$p12)) as.numeric(cfg_global$coloc_settings$p12) else 5e-6
-
-# Read harmonization settings
-
-# Read harmonization settings
-gwaslab_env <- if (!is.null(cfg_global$harmonization_settings$env_name)) {
-  cfg_global$harmonization_settings$env_name
-} else {
-  "gwaslab"
-}
 
 # Read plot settings
 plot_sig_threshold <- if (!is.null(cfg_global$plot_settings$significance_threshold)) {
@@ -191,7 +181,7 @@ min_snps_susie <- if (!is.null(cfg_global$coloc_settings$min_snps_susie)) {
 message(glue("[INIT] PP4 Threshold: {coloc_pp4_thresh}"))
 message(glue("[INIT] SuSiE Threshold: {susie_thresh}"))
 message(glue("[INIT] Min SNPs: {min_snps}"))
-message(glue("[INIT] GWASLab Environment: {gwaslab_env}"))
+message("[INIT] Harmonizer: native EasyColoc")
 message(glue("[INIT] QTL sigPairs prefilter: {prefilter_sig_pairs}"))
 
 cfg_runtime <- if (!is.null(cfg_global$runtime)) cfg_global$runtime else list()
@@ -467,7 +457,8 @@ run_pipeline <- function() {
             gwas_raw,
             type = "gwas",
             col_map = as.list(gwas_cfg$columns),
-            case_control = (gwas_cfg$type == "cc")
+            case_control = (gwas_cfg$type == "cc"),
+            sample_size_n = gwas_cfg$sample_size_n
           )
 
           ref_fasta <- if (gwas_cfg$build == "hg19") cfg_global$ref_genome_hg19 else cfg_global$ref_genome_hg38
@@ -494,7 +485,7 @@ run_pipeline <- function() {
           ref_alt_freq <- "AF"
           qtl_build <- if (is.null(cfg_qtl$qtl_info$build)) "hg38" else cfg_qtl$qtl_info$build
 
-          gwas_harm <- run_gwaslab_harmonization(
+          gwas_harm <- run_easycoloc_harmonization(
             gwas_std,
             ref_fasta = ref_fasta,
             ref_vcf = ref_vcf_1kg,
@@ -505,20 +496,19 @@ run_pipeline <- function() {
             n_threads = cfg_global$n_cores,
             save_dir = cfg_global$harmonize_dir,
             dataset_id = gwas_cfg$id,
-            env_name = gwaslab_env,
-            liftover_chain = cfg_global$harmonization_settings$liftover_chain
+            input_file = gwas_cfg$file,
+            liftover_chain = cfg_global$harmonization_settings$liftover_chain,
+            sample_size_n = gwas_cfg$sample_size_n
           )
 
-          if (!"N" %in% names(gwas_harm) && !is.null(gwas_cfg$sample_size_n)) {
-            gwas_harm[, N := as.numeric(gwas_cfg$sample_size_n)]
-          }
+          gwas_harm <- easycoloc_standardize_harmonized_gwas(gwas_harm, sample_size_n = gwas_cfg$sample_size_n)
 
           plink_build <- if (is.null(cfg_qtl$qtl_info$build)) "hg38" else as.character(cfg_qtl$qtl_info$build)
           plink_ref_hg38 <- if (identical(plink_build, "hg19")) cfg_global$plink_hg19 else cfg_global$plink_hg38
           if (is.null(plink_ref_hg38) || !nzchar(plink_ref_hg38)) {
             stop(glue("PLINK reference not configured for QTL build: {plink_build}"))
           }
-          rsid_col_gwas <- if ("rsID" %in% names(gwas_harm)) "rsID" else if ("SNPID" %in% names(gwas_harm)) "SNPID"
+          rsid_col_gwas <- if ("rsID" %in% names(gwas_harm) && any(grepl("^rs[0-9]+$", as.character(gwas_harm$rsID), ignore.case = TRUE), na.rm = TRUE)) "rsID" else if ("SNPID" %in% names(gwas_harm)) "SNPID"
           p_col_locus <- if ("P" %in% names(gwas_harm)) "P"
           chr_col_locus <- if ("CHR" %in% names(gwas_harm)) "CHR"
           pos_col_locus <- if ("POS" %in% names(gwas_harm)) "POS"

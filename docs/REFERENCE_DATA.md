@@ -74,7 +74,7 @@ Additional bootstrap modes:
 
 - `1kg_af_*`
   Format: bgzip-compatible allele frequency table per build and population
-  Used for: GWAS harmonization with gwaslab
+  Used for: native GWAS harmonization
 
 ### Required when hg19 GWAS are present
 

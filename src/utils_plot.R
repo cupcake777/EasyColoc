@@ -9,11 +9,6 @@ suppressPackageStartupMessages({
   library(data.table)
   library(glue)
   library(ggrepel)
-  library(rtracklayer)
-  library(TxDb.Hsapiens.UCSC.hg38.knownGene)
-  library(org.Hs.eg.db)
-  library(GenomicFeatures)
-  library(AnnotationDbi)
   library(grid)
   library(viridis) # Perceptually uniform, colorblind-friendly color scales
 })
@@ -1126,6 +1121,16 @@ genetrack <- function(chrom_str, xlim_bp, gtf_path = NULL, show_strand_legend = 
   if (is.null(tx_df) || nrow(tx_df) == 0) {
     tryCatch(
       {
+        required_pkgs <- c(
+          "TxDb.Hsapiens.UCSC.hg38.knownGene",
+          "GenomicFeatures",
+          "AnnotationDbi",
+          "org.Hs.eg.db"
+        )
+        missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+        if (length(missing_pkgs) > 0) {
+          stop(glue("optional gene-track packages unavailable: {paste(missing_pkgs, collapse=', ')}"))
+        }
         txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene
         subset_tx <- GenomicFeatures::transcriptsByOverlaps(txdb, gr)
 

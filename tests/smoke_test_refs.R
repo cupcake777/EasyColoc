@@ -55,7 +55,7 @@ global_cfg <- list(
   harmonize_dir = "harmony",
   clump = list(p1 = 5e-8, p2 = 5e-8, r2 = 0.1, kb = 1000),
   coloc_settings = list(pp4_threshold = 0.7, susie_threshold = 0.5, min_snps = 10),
-  harmonization_settings = list(env_name = "gwaslab", liftover_chain = "ref/hg19ToHg38.over.chain.gz")
+  harmonization_settings = list(liftover_chain = "ref/hg19ToHg38.over.chain.gz")
 )
 yaml::write_yaml(global_cfg, file.path(tmp_dir, "config", "global.yaml"))
 

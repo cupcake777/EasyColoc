@@ -29,7 +29,7 @@ EasyColoc expects these tools to be available locally:
 
 For the full GWAS harmonization path, you also want:
 
-- a working `gwaslab` environment
+- reference FASTA/AF/dbSNP/liftOver assets for native EasyColoc harmonization
 - reference FASTA/dbSNP resources
 
 Recommended first checks:

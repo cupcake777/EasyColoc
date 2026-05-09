@@ -214,7 +214,7 @@ easycoloc_collect_reference_requirements <- function(cfg_bundle, include_qtl_fil
     path = cfg_global$harmonize_dir,
     path_type = "directory",
     format = "working directory",
-    used_for = "gwaslab intermediate outputs",
+    used_for = "native harmonized GWAS caches",
     stage = "harmonization"
   )
 
@@ -291,7 +291,7 @@ easycoloc_collect_reference_requirements <- function(cfg_bundle, include_qtl_fil
         path = ref_vcf,
         path_type = "file",
         format = "TSV.GZ allele frequency table",
-        used_for = "gwaslab harmonization prior/reference AF",
+        used_for = "native harmonization prior/reference AF",
         stage = "harmonization"
       )
     }

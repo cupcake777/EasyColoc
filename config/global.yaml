@@ -58,7 +58,6 @@ runtime:
   parallel_qtl_tasks: false
 
 harmonization_settings:
-  env_name: "gwaslab"
   liftover_chain: "refs/liftover/hg19ToHg38.over.chain.gz"
 
 sensitivity_analysis:
