@@ -1,9 +1,24 @@
 # EasyColoc
 
+**Version & Registry**
+
+[![Version](https://img.shields.io/badge/version-1.0.0-1f6feb)](CITATION.cff)
+[![Repository](https://img.shields.io/badge/repository-GitHub-24292f)](https://github.com/cupcake777/EasyColoc)
+
+**Environment**
+
+[![R](https://img.shields.io/badge/R-%E2%89%A54.2.0-276DC3)](environment.yml)
+[![Python](https://img.shields.io/badge/Python-3.9--3.12-3776AB)](environment.yml)
+[![Builds](https://img.shields.io/badge/genome_build-hg19%20%7C%20hg38-1f6feb)](docs/REFERENCE_COMPATIBILITY.md)
+
+**CI/CD & Quality**
+
 [![smoke-lite](https://github.com/cupcake777/EasyColoc/actions/workflows/smoke-lite.yml/badge.svg)](https://github.com/cupcake777/EasyColoc/actions/workflows/smoke-lite.yml)
+[![Validation](https://img.shields.io/badge/validation-doctor%20%7C%20smoke-2da44e)](#install)
+
+**License**
+
 [![License](https://img.shields.io/github/license/cupcake777/EasyColoc)](LICENSE)
-[![Build Support](https://img.shields.io/badge/build-hg19%20%7C%20hg38-1f6feb)](docs/REFERENCE_COMPATIBILITY.md)
-[![ABF + SuSiE](https://img.shields.io/badge/coloc-ABF%20%2B%20SuSiE-be3455)](#what-it-does)
 
 EasyColoc is a GWAS-to-QTL colocalization pipeline. It standardizes GWAS
 summary statistics, queries tabix-indexed QTL resources, runs coloc ABF and
