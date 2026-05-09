@@ -76,7 +76,7 @@ This is the fastest way to confirm that your local EasyColoc installation,
 | --- | --- |
 | You only want to validate the repo | Run `./easycoloc smoke` (note: report web CLI smoke may need localhost permission in restricted sandboxes) |
 | You need a portable starter project | Run `./easycoloc init <dir>` |
-| You already have reference assets | Edit the portable defaults in `config/*.yaml` or create private overrides in `config/local/` |
+| You already have reference assets | Edit the portable defaults in `config/*.yml` or create private overrides in `config/local/` |
 | You need local 1KG or GTEx support files | Use `bootstrap-refs` as shown below |
 
 ## Scenario 5. Build A Real 1000 Genomes Reference
@@ -126,7 +126,7 @@ This writes:
 - `GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt`
 - `GTEx_v8_eQTL_summary.csv`
 - `GTEx_v8_sQTL_summary.csv`
-- `qtl_gtex_generated.yaml`
+- `qtl_gtex_generated.yml` in the selected metadata output directory
 
 Use the generated YAML as a starting point for GTEx-based analyses.
 
@@ -134,16 +134,16 @@ Use the generated YAML as a starting point for GTEx-based analyses.
 
 The minimum files to review are:
 
-- `config/global.yaml`
-- `config/gwas.yaml`
-- `config/qtl.yaml`
+- `config/global.yml`
+- `config/gwas.yml`
+- `config/qtl.yml`
 - `config/README.md`
 
 | File | Main responsibility |
 | --- | --- |
-| `config/global.yaml` | output paths, references, coloc thresholds, plotting, runtime behavior |
-| `config/gwas.yaml` | GWAS datasets, build, population, trait type, sample size, column mapping |
-| `config/qtl.yaml` | QTL build, metadata table, allPairs/sigPairs columns, downstream field mapping |
+| `config/global.yml` | output paths, references, coloc thresholds, plotting, runtime behavior |
+| `config/gwas.yml` | GWAS datasets, build, population, trait type, sample size, column mapping |
+| `config/qtl.yml` | QTL build, metadata table, allPairs/sigPairs columns, downstream field mapping |
 
 Common fields to confirm:
 
@@ -175,9 +175,9 @@ Or run against explicit config files:
 
 ```bash
 ./easycoloc run --managed \
-  --global /path/to/global.yaml \
-  --gwas /path/to/gwas.yaml \
-  --qtl /path/to/qtl.yaml
+  --global /path/to/global.yml \
+  --gwas /path/to/gwas.yml \
+  --qtl /path/to/qtl.yml
 ```
 
 What happens during the run:

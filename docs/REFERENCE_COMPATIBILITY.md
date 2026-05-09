@@ -24,11 +24,11 @@ generated but biologically misleading.
 
 | Layer | What must match | Typical EasyColoc input | Recommended check |
 | --- | --- | --- | --- |
-| GWAS summary statistics | genome build | `gwas.yaml` dataset `build` | Confirm `hg19` vs `hg38` before harmonization |
-| QTL summary statistics | genome build | `qtl.yaml` plus QTL files | Ensure regional queries and phenotype coordinates use the same build |
+| GWAS summary statistics | genome build | `gwas.yml` dataset `build` | Confirm `hg19` vs `hg38` before harmonization |
+| QTL summary statistics | genome build | `qtl.yml` plus QTL files | Ensure regional queries and phenotype coordinates use the same build |
 | LD reference panel | genome build and population | `plink_hg19` or `plink_hg38`, optional `plink_keep` | Match build exactly; prefer ancestry-matched keep/sample files |
-| recombination map | genome build and population | `config/global.yaml -> recom` | Use for plotting only, but keep build/pop aligned with the locus panel |
-| gene annotation | genome build and version | `config/global.yaml -> gene_anno` | Keep annotation build aligned with the locus coordinates; record version such as GENCODE v40 |
+| recombination map | genome build and population | `config/global.yml -> recom` | Use for plotting only, but keep build/pop aligned with the locus panel |
+| gene annotation | genome build and version | `config/global.yml -> gene_anno` | Keep annotation build aligned with the locus coordinates; record version such as GENCODE v40 |
 | allele frequency reference | genome build and population | `1kg_af` tables | Match the harmonization build and the intended ancestry when possible |
 
 ## Practical Rules

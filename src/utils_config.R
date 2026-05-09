@@ -25,9 +25,9 @@ easycoloc_resolve_project_root <- function(cfg_global, global_config_path) {
 
 easycoloc_config_paths <- function() {
   list(
-    global = easycoloc_get_config_path("EASYCOLOC_GLOBAL_CONFIG", "config/global.yaml"),
-    gwas = easycoloc_get_config_path("EASYCOLOC_GWAS_CONFIG", "config/gwas.yaml"),
-    qtl = easycoloc_get_config_path("EASYCOLOC_QTL_CONFIG", "config/qtl.yaml")
+    global = easycoloc_get_config_path("EASYCOLOC_GLOBAL_CONFIG", "config/global.yml"),
+    gwas = easycoloc_get_config_path("EASYCOLOC_GWAS_CONFIG", "config/gwas.yml"),
+    qtl = easycoloc_get_config_path("EASYCOLOC_QTL_CONFIG", "config/qtl.yml")
   )
 }
 
@@ -205,7 +205,7 @@ easycoloc_resolve_output_dir_arg <- function(args = character(),
   }
 
   if (isTRUE(required)) {
-    stop("Output directory must be provided explicitly or resolvable from config/global.yaml", call. = FALSE)
+    stop("Output directory must be provided explicitly or resolvable from config/global.yml", call. = FALSE)
   }
 
   NA_character_

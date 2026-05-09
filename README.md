@@ -32,15 +32,14 @@ state, and an HTML report.
 | `run_coloc.r` | Main pipeline runner |
 | `src/` | R modules for config, harmonization, matching, coloc, plotting, reporting, and runtime state |
 | `tools/` | Operational helpers: doctor, refs, bootstrap, monitor, manifest, report-web, harmony QC |
-| `config/` | Portable example configs and metadata tables |
-| `templates/project/` | Files copied by `./easycoloc init` |
+| `config/` | Portable default configs and metadata tables |
 | `tests/` | Parse checks, smoke tests, and small fixtures |
 | `docs/` | Tutorial, architecture, reference setup, and Docker notes |
 | `examples/` | Minimal synthetic plotting demo |
 | `web/` | Local interactive report UI source |
 
 Local run artifacts are ignored by git and may appear after analysis:
-`results/`, `temp/`, `harmony/`, `logs/`, `config/local/`, `web/dist/`, and
+`results/`, `temp/`, `harmony/`, `logs/`, `data/`, `config/local/`, `web/dist/`, and
 `web/node_modules/`.
 
 ## Install
@@ -75,7 +74,7 @@ Expected key outputs:
 ## Typical Real Run
 
 1. Prepare or bootstrap references.
-2. Edit `config/global.yaml`, `config/gwas.yaml`, and `config/qtl.yaml`, or use
+2. Edit `config/global.yml`, `config/gwas.yml`, and `config/qtl.yml`, or use
    private overrides under `config/local/`.
 3. Check paths and tools.
 4. Run the pipeline.
@@ -92,9 +91,9 @@ For machine-specific paths:
 
 ```bash
 ./easycoloc run --managed \
-  --global config/local/global.yaml \
-  --gwas config/local/gwas.yaml \
-  --qtl config/local/qtl.yaml
+  --global config/local/global.yml \
+  --gwas config/local/gwas.yml \
+  --qtl config/local/qtl.yml
 ```
 
 ## Main Commands
@@ -121,15 +120,16 @@ EasyColoc stores reusable GWAS harmonization caches in `harmony/`. The current
 canonical schema includes:
 
 ```text
-SNPID rsID variant_id CHR POS EA NEA EAF BETA SE P N
+SNPID variant_id CHR POS EA NEA EAF BETA SE P N
 ```
 
 Run QC after cache generation:
 
 ```bash
 ./easycoloc harmony-qc \
-  --global config/global.yaml \
-  --gwas config/gwas.yaml \
+  --global config/global.yml \
+  --gwas config/gwas.yml \
+  --qtl config/qtl.yml \
   --output-dir results/harmony_qc \
   --sample-n 200000 \
   --dbsnp-sample-n 5000

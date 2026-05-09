@@ -4,7 +4,7 @@
 library(jsonlite)
 library(glue)
 
-HASH_DIR <- "~/work/coloc/snp_ref" # 请根据实际情况修改路径，或者通过 config 读取
+HASH_DIR <- Sys.getenv("EASYCOLOC_HASH_JSON_DIR", unset = "~/work/coloc/snp_ref")
 if (!dir.exists(HASH_DIR)) stop("Directory not found!")
 
 files <- list.files(HASH_DIR, pattern = "chr_.*_snp151_hash_table\\.json$", full.names = TRUE)

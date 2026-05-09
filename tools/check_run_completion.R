@@ -88,6 +88,15 @@ has_runtime_failures <- nrow(event_log_dt) > 0 &&
 heartbeat_failed <- !is.null(heartbeat) &&
   !is.null(heartbeat$stage) &&
   heartbeat$stage %in% c("pipeline_failed", "summary_failed", "report_failed")
+heartbeat_complete <- !is.null(heartbeat) &&
+  !is.null(heartbeat$stage) &&
+  identical(as.character(heartbeat$stage), "pipeline_complete")
+event_summary_complete <- nrow(event_log_dt) > 0 &&
+  "stage" %in% names(event_log_dt) &&
+  any(event_log_dt$stage == "summary_complete", na.rm = TRUE)
+event_report_complete <- nrow(event_log_dt) > 0 &&
+  "stage" %in% names(event_log_dt) &&
+  any(event_log_dt$stage == "report_complete", na.rm = TRUE)
 
 abf_count <- if (dir.exists(file.path(output_dir, "abf"))) {
   length(list.files(file.path(output_dir, "abf"), pattern = "_locus_results\\.csv$", full.names = TRUE))
@@ -111,6 +120,10 @@ manifest_summary_file <- file.path(output_dir, "output_manifest_summary.json")
 status <- if (has_failed_tasks || has_runtime_failures || heartbeat_failed) {
   "FAILED"
 } else if (has_complete_marker && has_summary_marker && has_report_marker) {
+  "COMPLETE"
+} else if (heartbeat_complete && event_summary_complete && event_report_complete) {
+  "COMPLETE"
+} else if (heartbeat_complete && abf_count > 0) {
   "COMPLETE"
 } else if (length(log_lines) > 0) {
   "INCOMPLETE"

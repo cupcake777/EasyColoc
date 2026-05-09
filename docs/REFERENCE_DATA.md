@@ -23,7 +23,7 @@ Run from the repository root:
 ```bash
 ./easycoloc refs
 ./easycoloc refs --include-qtl-files
-./easycoloc bootstrap-refs config/reference_sources.template.yaml --rewrite-config
+./easycoloc bootstrap-refs config/reference_sources.template.yml --rewrite-config
 ./easycoloc bootstrap-refs --demo ./demo_quickstart --run
 ./easycoloc bootstrap-refs --setup-1kg ./refs/1kg_phase3_hg19 --build hg19 --pop EAS --chromosomes 22
 ./easycoloc bootstrap-refs --setup-1kg ./refs/1kg_phase3_hg38 --build hg38 --pop EAS --chromosomes 22
@@ -41,7 +41,7 @@ This prints, for each reference:
 
 The bootstrap command uses a source-mapping YAML to symlink or copy shared
 reference assets into a project-local `refs/` layout and can optionally rewrite
-`config/global.yaml` to point at those local paths.
+`config/global.yml` to point at those local paths.
 
 Additional bootstrap modes:
 
@@ -111,7 +111,7 @@ Additional bootstrap modes:
 
 ## Performance Defaults
 
-EasyColoc now enables this by default in `config/global.yaml`:
+EasyColoc now enables this by default in `config/global.yml`:
 
 ```yaml
 analysis:

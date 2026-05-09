@@ -20,7 +20,7 @@ utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
 invisible(lapply(utils_files, source))
 
 # Read global config
-cfg_global <- yaml::read_yaml("config/global.yaml")
+cfg_global <- yaml::read_yaml("config/global.yml")
 
 # Get plot settings from config
 plot_sig_threshold <- if(!is.null(cfg_global$plot_settings$significance_threshold)) {

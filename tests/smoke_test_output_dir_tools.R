@@ -56,9 +56,9 @@ fwrite(
 )
 
 Sys.setenv(
-  EASYCOLOC_GLOBAL_CONFIG = file.path(tmp_dir, "missing_global.yaml"),
-  EASYCOLOC_GWAS_CONFIG = file.path(tmp_dir, "missing_gwas.yaml"),
-  EASYCOLOC_QTL_CONFIG = file.path(tmp_dir, "missing_qtl.yaml")
+  EASYCOLOC_GLOBAL_CONFIG = file.path(tmp_dir, "missing_global.yml"),
+  EASYCOLOC_GWAS_CONFIG = file.path(tmp_dir, "missing_gwas.yml"),
+  EASYCOLOC_QTL_CONFIG = file.path(tmp_dir, "missing_qtl.yml")
 )
 on.exit(
   Sys.unsetenv(c("EASYCOLOC_GLOBAL_CONFIG", "EASYCOLOC_GWAS_CONFIG", "EASYCOLOC_QTL_CONFIG")),
@@ -105,6 +105,48 @@ if (is.null(check_status)) {
 }
 assert_true(check_status == 1L, "completion check should report incomplete status for smoke output")
 assert_true(any(grepl("\\[CHECK\\] status: INCOMPLETE", check_out)), "completion check output missing status")
+
+tmp_heartbeat_complete_dir <- tempfile(pattern = "easycoloc_output_tools_heartbeat_complete_")
+dir.create(tmp_heartbeat_complete_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(tmp_heartbeat_complete_dir, "abf"), showWarnings = FALSE)
+
+initialize_runtime_tracker(tmp_heartbeat_complete_dir, enabled = TRUE, config_fingerprint = "smoke_fp_heartbeat_complete")
+register_active_run(log_file = NA_character_, run_label = "output_tools_heartbeat_complete")
+write_runtime_heartbeat(stage = "pipeline_complete", message_text = "pipeline finished without managed log")
+append_runtime_event(
+  level = "INFO",
+  stage = "summary_complete",
+  message_text = "Merged ABF outputs"
+)
+append_runtime_event(
+  level = "INFO",
+  stage = "report_complete",
+  message_text = "report.html"
+)
+fwrite(
+  data.table(
+    GWAS_ID = "HB_GWAS",
+    QTL_ID = "prenatal",
+    Locus = "rs1",
+    Phenotype = "GENE1",
+    PP4 = 0.91,
+    n_snps = 42
+  ),
+  file.path(tmp_heartbeat_complete_dir, "abf", "HB_GWAS_rs1_locus_results.csv")
+)
+
+check_heartbeat_complete_out <- suppressWarnings(system2(
+  "Rscript",
+  c("tools/check_run_completion.R", tmp_heartbeat_complete_dir),
+  stdout = TRUE,
+  stderr = TRUE
+))
+check_heartbeat_complete_status <- attr(check_heartbeat_complete_out, "status")
+if (is.null(check_heartbeat_complete_status)) {
+  check_heartbeat_complete_status <- 0L
+}
+assert_true(check_heartbeat_complete_status == 0L, "completion check should pass from runtime heartbeat when run log is unavailable")
+assert_true(any(grepl("\\[CHECK\\] status: COMPLETE", check_heartbeat_complete_out)), "heartbeat completion check output missing COMPLETE status")
 
 tmp_complete_dir <- tempfile(pattern = "easycoloc_output_tools_complete_")
 dir.create(tmp_complete_dir, recursive = TRUE, showWarnings = FALSE)

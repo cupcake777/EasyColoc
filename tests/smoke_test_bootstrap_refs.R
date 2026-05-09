@@ -31,9 +31,9 @@ dir.create(project_dir, recursive = TRUE, showWarnings = FALSE)
 init_res <- system2("bash", c("easycoloc", "init", project_dir), stdout = TRUE, stderr = TRUE)
 assert_true(length(init_res) >= 1, "project init output missing")
 
-global_path <- file.path(project_dir, "config", "global.yaml")
-gwas_path <- file.path(project_dir, "config", "gwas.yaml")
-qtl_path <- file.path(project_dir, "config", "qtl.yaml")
+global_path <- file.path(project_dir, "config", "global.yml")
+gwas_path <- file.path(project_dir, "config", "gwas.yml")
+qtl_path <- file.path(project_dir, "config", "qtl.yml")
 
 gwas_cfg <- yaml::read_yaml(gwas_path)
 gwas_cfg$datasets[[1]]$build <- "hg19"
@@ -85,7 +85,7 @@ source_cfg <- list(
     )
   )
 )
-source_yaml <- file.path(project_dir, "config", "reference_sources.test.yaml")
+source_yaml <- file.path(project_dir, "config", "reference_sources.test.yml")
 yaml::write_yaml(source_cfg, source_yaml)
 
 cmd <- c(
@@ -101,8 +101,8 @@ bootstrap_out <- system2("bash", cmd, stdout = TRUE, stderr = TRUE)
 assert_true(any(grepl("\\[BOOTSTRAP\\].*plink_hg38", bootstrap_out)), "bootstrap did not materialize plink_hg38")
 
 global_cfg <- yaml::read_yaml(global_path)
-assert_true(identical(global_cfg$plink_hg38, "refs/plink/hg38/1kg_hg38_filtered"), "global.yaml plink_hg38 not rewritten")
-assert_true(identical(global_cfg$`1kg_af`, "refs/af"), "global.yaml 1kg_af not rewritten")
+assert_true(identical(global_cfg$plink_hg38, "refs/plink/hg38/1kg_hg38_filtered"), "global.yml plink_hg38 not rewritten")
+assert_true(identical(global_cfg$`1kg_af`, "refs/af"), "global.yml 1kg_af not rewritten")
 assert_true(nzchar(Sys.readlink(file.path(project_dir, "refs", "plink", "hg38", "1kg_hg38_filtered.bed"))), "plink bed symlink missing")
 assert_true(nzchar(Sys.readlink(file.path(project_dir, "refs", "af"))), "af directory should be a symlink")
 assert_true(file.exists(file.path(project_dir, "reference_bootstrap_manifest.tsv")), "bootstrap manifest missing")

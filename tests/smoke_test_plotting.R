@@ -9,7 +9,7 @@ source("src/utils_helpers.R")
 source("src/utils_plot.R")
 source("src/utils_output.R")
 
-cfg_global <- yaml::read_yaml("config/global.yaml")
+cfg_global <- yaml::read_yaml("config/global.yml")
 fixture_dir <- file.path("tests", "fixtures")
 
 resolve_existing_file <- function(paths) {

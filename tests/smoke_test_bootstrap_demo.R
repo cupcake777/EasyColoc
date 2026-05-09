@@ -15,7 +15,7 @@ out <- system2("bash", cmd, stdout = TRUE, stderr = TRUE)
 status <- attr(out, "status")
 assert_true(is.null(status) || identical(status, 0L), paste(c("demo pipeline failed:", out), collapse = "\n"))
 
-assert_true(file.exists(file.path(project_dir, "config", "global.yaml")), "demo global config missing")
+assert_true(file.exists(file.path(project_dir, "config", "global.yml")), "demo global config missing")
 assert_true(file.exists(file.path(project_dir, "data", "gwas", "demo_gwas.tsv.gz")), "demo GWAS file missing")
 assert_true(file.exists(file.path(project_dir, "data", "qtl", "all_pairs_demo.txt.gz")), "demo allPairs file missing")
 assert_true(file.exists(file.path(project_dir, "data", "qtl", "all_pairs_demo.txt.gz.tbi")), "demo allPairs tabix missing")

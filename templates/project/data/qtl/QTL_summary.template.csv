@@ -1,2 +1,0 @@
-Type,NumberRNASeqandGTSamples,allPairsTabixFilename,sigPairsTabixFilename
-example_eqtl,500,/ABSOLUTE/PATH/TO/example_all_pairs.txt.gz,/ABSOLUTE/PATH/TO/example_sig_pairs.txt.gz

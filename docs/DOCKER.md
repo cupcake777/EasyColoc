@@ -44,7 +44,7 @@ docker run -it \
 docker run -it \
   -v /path/to/my_analysis:/work \
   easycoloc:latest \
-  bash /opt/EasyColoc/tools/batch_run.sh /work/config.yaml
+  bash /opt/EasyColoc/tools/batch_run.sh /work/config.yml
 ```
 
 ### 4. Interactive Mode (Debug/Development)

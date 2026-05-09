@@ -89,6 +89,43 @@ easycoloc_collect_reference_requirements <- function(cfg_bundle, include_qtl_fil
   qtl_build <- if (!is.null(cfg_qtl$qtl_info$build)) as.character(cfg_qtl$qtl_info$build) else "hg38"
 
   add_row <- function(rows, name, required, path, path_type, format, used_for, stage, note = "") {
+    if (is.list(path) && !is.data.frame(path)) {
+      path_names <- names(path)
+      if (is.null(path_names)) path_names <- as.character(seq_along(path))
+      for (idx in seq_along(path)) {
+        rows <- add_row(
+          rows = rows,
+          name = paste0(name, "_", path_names[[idx]]),
+          required = required,
+          path = path[[idx]],
+          path_type = path_type,
+          format = format,
+          used_for = used_for,
+          stage = stage,
+          note = note
+        )
+      }
+      return(rows)
+    }
+    if (length(path) > 1) {
+      path_names <- names(path)
+      if (is.null(path_names)) path_names <- as.character(seq_along(path))
+      for (idx in seq_along(path)) {
+        rows <- add_row(
+          rows = rows,
+          name = paste0(name, "_", path_names[[idx]]),
+          required = required,
+          path = path[[idx]],
+          path_type = path_type,
+          format = format,
+          used_for = used_for,
+          stage = stage,
+          note = note
+        )
+      }
+      return(rows)
+    }
+
     exists_flag <- FALSE
     status <- "missing"
     size_bytes <- NA_real_

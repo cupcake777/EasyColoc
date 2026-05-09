@@ -57,7 +57,7 @@ global_cfg <- list(
   coloc_settings = list(pp4_threshold = 0.7, susie_threshold = 0.5, min_snps = 10),
   harmonization_settings = list(liftover_chain = "ref/hg19ToHg38.over.chain.gz")
 )
-yaml::write_yaml(global_cfg, file.path(tmp_dir, "config", "global.yaml"))
+yaml::write_yaml(global_cfg, file.path(tmp_dir, "config", "global.yml"))
 
 gwas_cfg <- list(
   datasets = list(
@@ -83,7 +83,7 @@ gwas_cfg <- list(
     )
   )
 )
-yaml::write_yaml(gwas_cfg, file.path(tmp_dir, "config", "gwas.yaml"))
+yaml::write_yaml(gwas_cfg, file.path(tmp_dir, "config", "gwas.yml"))
 
 qtl_cfg <- list(
   qtl_info = list(
@@ -106,13 +106,13 @@ qtl_cfg <- list(
     se = "slope_se"
   )
 )
-yaml::write_yaml(qtl_cfg, file.path(tmp_dir, "config", "qtl.yaml"))
+yaml::write_yaml(qtl_cfg, file.path(tmp_dir, "config", "qtl.yml"))
 
 cmd <- c(
   "tools/list_reference_requirements.R",
-  "--global", file.path(tmp_dir, "config", "global.yaml"),
-  "--gwas", file.path(tmp_dir, "config", "gwas.yaml"),
-  "--qtl", file.path(tmp_dir, "config", "qtl.yaml"),
+  "--global", file.path(tmp_dir, "config", "global.yml"),
+  "--gwas", file.path(tmp_dir, "config", "gwas.yml"),
+  "--qtl", file.path(tmp_dir, "config", "qtl.yml"),
   "--include-qtl-files"
 )
 refs_out <- system2("Rscript", cmd, stdout = TRUE, stderr = TRUE)

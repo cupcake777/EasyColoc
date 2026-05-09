@@ -7,7 +7,7 @@ suppressPackageStartupMessages({
 utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
 invisible(lapply(utils_files, source))
 
-cfg_global <- yaml::read_yaml("config/global.yaml")
+cfg_global <- yaml::read_yaml("config/global.yml")
 fixture_dir <- file.path("tests", "fixtures")
 
 resolve_existing_file <- function(paths) {

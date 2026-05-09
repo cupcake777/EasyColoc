@@ -260,21 +260,16 @@ easycoloc_bootstrap_apply <- function(cfg_bundle, source_cfg, rewrite_config = F
   manifest
 }
 
-easycoloc_copy_project_template <- function(dest_dir, force = FALSE) {
-  template_dir <- "templates/project"
-  if (!dir.exists(template_dir)) {
-    stop("Template directory not found: ", template_dir, call. = FALSE)
-  }
+easycoloc_create_project_skeleton <- function(dest_dir, force = FALSE) {
   if (dir.exists(dest_dir) && length(list.files(dest_dir, all.files = TRUE, no.. = TRUE)) > 0 && !isTRUE(force)) {
     stop("Destination exists and is not empty: ", dest_dir, call. = FALSE)
   }
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
-  file.copy(
-    from = list.files(template_dir, full.names = TRUE, all.files = TRUE, no.. = TRUE),
-    to = dest_dir,
-    recursive = TRUE,
-    overwrite = isTRUE(force)
-  )
+  dir.create(file.path(dest_dir, "config"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(dest_dir, "data", "gwas"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(dest_dir, "data", "qtl"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(dest_dir, "results"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(dest_dir, "temp"), recursive = TRUE, showWarnings = FALSE)
   normalizePath(dest_dir, mustWork = FALSE)
 }
 
@@ -426,7 +421,7 @@ easycoloc_write_demo_configs <- function(project_dir) {
       credible_set_color = "#E67E22"
     )
   )
-  yaml::write_yaml(global_cfg, file.path(project_dir, "config", "global.yaml"))
+  yaml::write_yaml(global_cfg, file.path(project_dir, "config", "global.yml"))
 
   gwas_cfg <- list(
     datasets = list(
@@ -454,7 +449,7 @@ easycoloc_write_demo_configs <- function(project_dir) {
       )
     )
   )
-  yaml::write_yaml(gwas_cfg, file.path(project_dir, "config", "gwas.yaml"))
+  yaml::write_yaml(gwas_cfg, file.path(project_dir, "config", "gwas.yml"))
 
   qtl_cfg <- list(
     qtl_info = list(
@@ -482,7 +477,7 @@ easycoloc_write_demo_configs <- function(project_dir) {
       af = "af"
     )
   )
-  yaml::write_yaml(qtl_cfg, file.path(project_dir, "config", "qtl.yaml"))
+  yaml::write_yaml(qtl_cfg, file.path(project_dir, "config", "qtl.yml"))
 }
 
 easycoloc_bootstrap_demo <- function(dest_dir, force = FALSE, run_pipeline = FALSE) {
@@ -499,7 +494,7 @@ easycoloc_bootstrap_demo <- function(dest_dir, force = FALSE, run_pipeline = FAL
     install_hint = "Install htslib/tabix to index demo QTL files."
   )
 
-  project_dir <- easycoloc_copy_project_template(dest_dir, force = force)
+  project_dir <- easycoloc_create_project_skeleton(dest_dir, force = force)
   dir.create(file.path(project_dir, "refs", "plink", "hg38"), recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(project_dir, "refs", "plink", "keep"), recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(project_dir, "refs", "af"), recursive = TRUE, showWarnings = FALSE)
@@ -531,17 +526,17 @@ easycoloc_bootstrap_demo <- function(dest_dir, force = FALSE, run_pipeline = FAL
     sprintf(
       "bash %s run --global %s --gwas %s --qtl %s",
       shQuote(file.path(normalizePath(getwd(), mustWork = FALSE), "easycoloc")),
-      shQuote(file.path(project_dir, "config", "global.yaml")),
-      shQuote(file.path(project_dir, "config", "gwas.yaml")),
-      shQuote(file.path(project_dir, "config", "qtl.yaml"))
+      shQuote(file.path(project_dir, "config", "global.yml")),
+      shQuote(file.path(project_dir, "config", "gwas.yml")),
+      shQuote(file.path(project_dir, "config", "qtl.yml"))
     ),
     "",
     "Or from the EasyColoc repo root:",
     sprintf(
       "./easycoloc run --global %s --gwas %s --qtl %s",
-      shQuote(file.path(project_dir, "config", "global.yaml")),
-      shQuote(file.path(project_dir, "config", "gwas.yaml")),
-      shQuote(file.path(project_dir, "config", "qtl.yaml"))
+      shQuote(file.path(project_dir, "config", "global.yml")),
+      shQuote(file.path(project_dir, "config", "gwas.yml")),
+      shQuote(file.path(project_dir, "config", "qtl.yml"))
     )
   )
   writeLines(demo_readme, file.path(project_dir, "DEMO.md"))
@@ -551,9 +546,9 @@ easycoloc_bootstrap_demo <- function(dest_dir, force = FALSE, run_pipeline = FAL
       "bash",
       c(
         "easycoloc", "run",
-        "--global", file.path(project_dir, "config", "global.yaml"),
-        "--gwas", file.path(project_dir, "config", "gwas.yaml"),
-        "--qtl", file.path(project_dir, "config", "qtl.yaml")
+        "--global", file.path(project_dir, "config", "global.yml"),
+        "--gwas", file.path(project_dir, "config", "gwas.yml"),
+        "--qtl", file.path(project_dir, "config", "qtl.yml")
       ),
       fail_message = "Toy demo pipeline execution failed."
     )
@@ -562,9 +557,9 @@ easycoloc_bootstrap_demo <- function(dest_dir, force = FALSE, run_pipeline = FAL
   data.table(
     mode = "demo",
     project_dir = project_dir,
-    global_config = file.path(project_dir, "config", "global.yaml"),
-    gwas_config = file.path(project_dir, "config", "gwas.yaml"),
-    qtl_config = file.path(project_dir, "config", "qtl.yaml"),
+    global_config = file.path(project_dir, "config", "global.yml"),
+    gwas_config = file.path(project_dir, "config", "gwas.yml"),
+    qtl_config = file.path(project_dir, "config", "qtl.yml"),
     plink_prefix = out_prefix,
     keep_file = keep_path
   )
@@ -939,7 +934,7 @@ easycoloc_fetch_gtex_meta <- function(dest_dir,
   }
 
   if (is.null(config_output_file) || !nzchar(config_output_file)) {
-    config_output_file <- file.path(dest_dir, "qtl_gtex_generated.yaml")
+    config_output_file <- file.path(dest_dir, "qtl_gtex_generated.yml")
   }
   summary_for_yaml <- if (identical(config_qtl_type, "eqtl")) generated_eqtl_summary else generated_sqtl_summary
   if (is.null(summary_for_yaml)) {

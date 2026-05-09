@@ -330,6 +330,29 @@ easycoloc_standardize_harmonized_gwas <- function(dt, sample_size_n = NULL) {
   res
 }
 
+easycoloc_harmonized_gwas_output_cols <- function() {
+  c("SNPID", "variant_id", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P", "N")
+}
+
+easycoloc_prepare_harmonized_gwas_output <- function(dt, sample_size_n = NULL) {
+  res <- easycoloc_standardize_harmonized_gwas(dt, sample_size_n = sample_size_n)
+  if ("rsID" %in% names(res)) {
+    valid_rsid <- !is.na(res$rsID) &
+      nzchar(as.character(res$rsID)) &
+      grepl("^rs[0-9]+$", as.character(res$rsID), ignore.case = TRUE)
+    res[valid_rsid, SNPID := as.character(rsID)]
+  }
+  output_cols <- easycoloc_harmonized_gwas_output_cols()
+  missing_cols <- setdiff(output_cols, names(res))
+  if (length(missing_cols) > 0) {
+    stop(glue("Cannot write harmonized GWAS cache; missing required column(s): {paste(missing_cols, collapse = ', ')}"))
+  }
+  res <- res[, ..output_cols]
+  res <- unique(res)
+  data.table::setorder(res, CHR, POS, SNPID)
+  res
+}
+
 easycoloc_normalize_build <- function(build) {
   build_chr <- as.character(build %||% "")
   build_chr <- tolower(gsub("^hg", "", build_chr))
@@ -846,13 +869,13 @@ run_easycoloc_harmonization <- function(sumstats_dt,
       ref_mtime <- if (file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
       input_mtime <- if (!is.null(source_file) && file.exists(source_file)) file.info(source_file)$mtime else NA
       dep_mtime <- max(c(ref_mtime, input_mtime), na.rm = TRUE)
-      required_cache_cols <- c("SNPID", "rsID", "variant_id", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P", "N")
+      required_cache_cols <- easycoloc_harmonized_gwas_output_cols()
       cache_header <- if (cache_size_ok) {
         tryCatch(names(data.table::fread(final_output_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
       } else {
         character()
       }
-      cache_schema_ok <- all(required_cache_cols %in% cache_header)
+      cache_schema_ok <- identical(cache_header, required_cache_cols)
       cache_ok <- cache_size_ok && cache_schema_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
       if (cache_ok) {
         log_message(glue("Found cached harmonized file: {final_output_file}"), verbose = verbose)
@@ -922,12 +945,13 @@ run_easycoloc_harmonization <- function(sumstats_dt,
   }
   res_dt <- easycoloc_standardize_harmonized_gwas(res_dt, sample_size_n = sample_size_n)
   easycoloc_validate_harmonized(res_dt, verbose = verbose)
-  log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(res_dt)}"), verbose = verbose)
+  output_dt <- easycoloc_prepare_harmonized_gwas_output(res_dt, sample_size_n = sample_size_n)
+  log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(output_dt)}"), verbose = verbose)
   if (use_cache) {
-    data.table::fwrite(res_dt, final_output_file, sep = "\t", na = "NA", quote = FALSE)
+    data.table::fwrite(output_dt, final_output_file, sep = "\t", na = "NA", quote = FALSE)
     log_message(glue("Saved result to: {final_output_file}"), verbose = verbose)
   }
-  res_dt
+  output_dt
 }
 
 # =============================================================================
@@ -1128,7 +1152,7 @@ apply_parse_geneID <- function(gene_ids, org_db = "org.Hs.eg.db") {
 #   min_snps: Minimum SNPs required for colocalization (default 30)
 #   pvalue_floor: Floor value for P-values to prevent -Inf in -log10(P).
 #                 Default 1e-300 follows GWAS catalog convention.
-#                 Configurable via coloc_settings.pvalue_floor in config/global.yaml.
+#                 Configurable via coloc_settings.pvalue_floor in config/global.yml.
 #   verbose: If TRUE, print detailed progress messages
 #
 # Returns:
@@ -1392,7 +1416,7 @@ prep_coloc_input_file <- function(gwas_df, qtl_df,
   # convention and stays safely above R's .Machine$double.xmin (~2.2e-308).
   # This prevents numerical instability without introducing meaningful bias
   # since such extreme P-values are effectively zero for practical interpretation.
-  # Configurable via coloc_settings.pvalue_floor in config/global.yaml.
+  # Configurable via coloc_settings.pvalue_floor in config/global.yml.
   p_gwas <- paste0(gwas_cols$pval, ".gwas")
   p_qtl <- paste0(qtl_cols$pval, ".qtl")
 

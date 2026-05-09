@@ -92,13 +92,13 @@ cmd_rewrite <- c(
   "--pop", "EAS",
   "--chromosomes", "22",
   "--base-url", paste0("file://", ftp_root),
-  "--global", file.path(project_dir, "config", "global.yaml"),
-  "--gwas", file.path(project_dir, "config", "gwas.yaml"),
-  "--qtl", file.path(project_dir, "config", "qtl.yaml"),
+  "--global", file.path(project_dir, "config", "global.yml"),
+  "--gwas", file.path(project_dir, "config", "gwas.yml"),
+  "--qtl", file.path(project_dir, "config", "qtl.yml"),
   "--rewrite-config"
 )
 invisible(system2("bash", cmd_rewrite, stdout = TRUE, stderr = TRUE))
-cfg_lines <- readLines(file.path(project_dir, "config", "global.yaml"))
+cfg_lines <- readLines(file.path(project_dir, "config", "global.yml"))
 assert_true(any(grepl("plink_hg19: refs/1kg_hg19/plink/1kg_phase3_hg19_EAS", cfg_lines, fixed = TRUE)), "plink_hg19 rewrite missing")
 assert_true(any(grepl("plink_keep: refs/1kg_hg19/keep/EAS.sample", cfg_lines, fixed = TRUE)), "plink_keep rewrite missing")
 cat("[SMOKE] 1KG setup smoke test passed\n")

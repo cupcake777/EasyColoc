@@ -43,7 +43,7 @@ out <- system2("bash", cmd, stdout = TRUE, stderr = TRUE)
 
 eqtl_summary <- file.path(meta_dir, "GTEx_v8_eQTL_summary.csv")
 sqtl_summary <- file.path(meta_dir, "GTEx_v8_sQTL_summary.csv")
-yaml_file <- file.path(meta_dir, "qtl_gtex_generated.yaml")
+yaml_file <- file.path(meta_dir, "qtl_gtex_generated.yml")
 assert_true(file.exists(file.path(meta_dir, basename(sample_attr))), "downloaded GTEx sample attributes missing")
 assert_true(file.exists(eqtl_summary), "GTEx eQTL summary missing")
 assert_true(file.exists(sqtl_summary), "GTEx sQTL summary missing")

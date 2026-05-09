@@ -188,6 +188,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 #
 # Run batch processing:
 #   docker run -v /host/config:/config -v /host/results:/results \
-#     easycoloc:latest bash -c "bash /opt/EasyColoc/tools/batch_run.sh /config/gwas_batch.yaml"
 #
 # =============================================================================

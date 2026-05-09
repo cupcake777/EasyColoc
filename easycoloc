@@ -14,7 +14,7 @@ Usage:
 Commands:
   run        Run the main pipeline (`--managed` for wrapped execution)
   doctor     Validate configs, core inputs and external dependencies
-  init       Scaffold a portable EasyColoc project template
+  init       Scaffold a minimal EasyColoc analysis project
   check      Check whether a run completed successfully
   status     Summarize per-GWAS progress and output counts
   monitor    Print the latest runtime heartbeat and output snapshot
@@ -170,7 +170,7 @@ case "${cmd}" in
           ;;
         --help|-h)
           cat <<'EOF'
-Usage: ./easycoloc init TARGET_DIR [--preset project] [--force]
+Usage: ./easycoloc init TARGET_DIR [--force]
 EOF
           exit 0
           ;;
@@ -200,9 +200,25 @@ EOF
       echo "[INIT] rerun with --force to overwrite" >&2
       exit 1
     fi
-    cp -R "${repo_root}/templates/project/." "${target_dir}/"
-    echo "[INIT] wrote portable project template to ${target_dir}"
-    echo "[INIT] next: edit ${target_dir}/config/*.yaml and run ./easycoloc doctor --global ${target_dir}/config/global.yaml --gwas ${target_dir}/config/gwas.yaml --qtl ${target_dir}/config/qtl.yaml"
+    mkdir -p "${target_dir}/config" "${target_dir}/data/gwas" "${target_dir}/data/qtl" "${target_dir}/results" "${target_dir}/temp"
+    cp "${repo_root}/config/global.yml" "${target_dir}/config/global.yml"
+    cp "${repo_root}/config/gwas.yml" "${target_dir}/config/gwas.yml"
+    cp "${repo_root}/config/qtl.yml" "${target_dir}/config/qtl.yml"
+    cat > "${target_dir}/README.md" <<EOF
+# EasyColoc Analysis Project
+
+Edit the files under \`config/\`, then run from the EasyColoc repository root:
+
+\`\`\`bash
+./easycoloc doctor --global ${target_dir}/config/global.yml --gwas ${target_dir}/config/gwas.yml --qtl ${target_dir}/config/qtl.yml
+./easycoloc run --managed --global ${target_dir}/config/global.yml --gwas ${target_dir}/config/gwas.yml --qtl ${target_dir}/config/qtl.yml
+\`\`\`
+
+Use \`data/gwas/\` for GWAS inputs and \`data/qtl/\` for tabix-indexed QTL files.
+Outputs are written to \`results/\`; temporary files are written to \`temp/\`.
+EOF
+    echo "[INIT] wrote minimal project to ${target_dir}"
+    echo "[INIT] next: edit ${target_dir}/config/*.yml and run ./easycoloc doctor --global ${target_dir}/config/global.yml --gwas ${target_dir}/config/gwas.yml --qtl ${target_dir}/config/qtl.yml"
     ;;
   check)
     exec Rscript tools/check_run_completion.R "$@"

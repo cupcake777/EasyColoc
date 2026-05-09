@@ -21,7 +21,7 @@ dir.create(file.path(tmp_dir, "plots"), showWarnings = FALSE)
 dir.create(file.path(tmp_dir, "rds"), showWarnings = FALSE)
 dir.create(file.path(tmp_dir, "susie"), showWarnings = FALSE)
 
-cfg_fp <- compute_runtime_config_fingerprint(c("config/global.yaml", "run_coloc.r"))
+cfg_fp <- compute_runtime_config_fingerprint(c("config/global.yml", "run_coloc.r"))
 initialize_runtime_tracker(tmp_dir, enabled = TRUE, config_fingerprint = cfg_fp)
 register_active_run(log_file = file.path(tmp_dir, "run_easycoloc_full_20990101_000000.log"), run_label = "smoke")
 write_runtime_heartbeat(stage = "smoke", message_text = "runtime tracker smoke test")

@@ -21,8 +21,9 @@ if (!file.exists(file.path(repo_root, "src", "utils_config.R"))) {
   repo_root <- normalizePath(getwd(), mustWork = FALSE)
 }
 
-global_cfg_path <- normalizePath(arg_value("--global", "config/global.yaml"), mustWork = FALSE)
-gwas_cfg_path <- normalizePath(arg_value("--gwas", "config/gwas.yaml"), mustWork = FALSE)
+global_cfg_path <- normalizePath(arg_value("--global", "config/global.yml"), mustWork = FALSE)
+gwas_cfg_path <- normalizePath(arg_value("--gwas", "config/gwas.yml"), mustWork = FALSE)
+qtl_cfg_path <- normalizePath(arg_value("--qtl", "config/qtl.yml"), mustWork = FALSE)
 output_dir <- normalizePath(arg_value("--output-dir", "results/harmony_qc"), mustWork = FALSE)
 output_html <- normalizePath(arg_value("--output", file.path(output_dir, "harmony_QC_report.html")), mustWork = FALSE)
 sample_n <- as.integer(arg_value("--sample-n", "200000"))
@@ -36,9 +37,18 @@ source(file.path(repo_root, "src", "utils_format.R"))
 
 cfg_global <- yaml::read_yaml(global_cfg_path)
 cfg_gwas <- yaml::read_yaml(gwas_cfg_path)
+cfg_qtl <- if (file.exists(qtl_cfg_path)) yaml::read_yaml(qtl_cfg_path) else list()
 base_dir <- easycoloc_resolve_project_root(cfg_global, global_cfg_path)
 cfg_global <- easycoloc_resolve_global_paths(cfg_global, base_dir)
 cfg_gwas <- easycoloc_resolve_gwas_paths(cfg_gwas, base_dir)
+target_build <- cfg_qtl$qtl_info$build %||% "hg38"
+target_build <- tolower(as.character(target_build))
+target_build_num <- easycoloc_normalize_build(target_build)
+dbsnp_vcf <- if (identical(target_build_num, "19")) {
+  cfg_global$dbsnp_hg19 %||% ""
+} else {
+  cfg_global$dbsnp_hg38 %||% ""
+}
 
 harmony_dir <- cfg_global$harmonize_dir
 if (is.null(harmony_dir) || !dir.exists(harmony_dir)) {
@@ -105,13 +115,13 @@ check_dbsnp_position_concordance <- function(dt, dbsnp_vcf, build, dataset) {
   if (is.null(dbsnp_vcf) || !nzchar(dbsnp_vcf) || !file.exists(dbsnp_vcf) || dbsnp_sample_n <= 0) {
     return(list(match_rate = NA_real_, checked = 0L, mismatches = data.table()))
   }
-  if (!all(c("CHR", "POS", "rsID") %in% names(dt))) {
+  if (!all(c("CHR", "POS", "SNPID") %in% names(dt))) {
     return(list(match_rate = NA_real_, checked = 0L, mismatches = data.table()))
   }
-  rs_ok <- !is.na(dt$rsID) & nzchar(as.character(dt$rsID)) &
-    grepl("^rs[0-9]+$", as.character(dt$rsID), ignore.case = TRUE) &
+  rs_ok <- !is.na(dt$SNPID) & nzchar(as.character(dt$SNPID)) &
+    grepl("^rs[0-9]+$", as.character(dt$SNPID), ignore.case = TRUE) &
     !is.na(dt$CHR) & !is.na(dt$POS)
-  candidates <- unique(dt[rs_ok, .(CHR = as.character(CHR), POS = as.integer(POS), rsID = as.character(rsID))])
+  candidates <- unique(dt[rs_ok, .(CHR = as.character(CHR), POS = as.integer(POS), SNPID = as.character(SNPID))])
   if (nrow(candidates) == 0) {
     return(list(match_rate = NA_real_, checked = 0L, mismatches = data.table()))
   }
@@ -128,7 +138,7 @@ check_dbsnp_position_concordance <- function(dt, dbsnp_vcf, build, dataset) {
   if (is.null(ref) || nrow(ref) == 0) {
     mismatches <- head(candidates[, .(
       dataset = dataset,
-      rsID,
+      SNPID,
       query_CHR = gsub("^chr", "", as.character(CHR), ignore.case = TRUE),
       query_POS = as.integer(POS),
       dbsnp_positions = NA_character_
@@ -136,23 +146,23 @@ check_dbsnp_position_concordance <- function(dt, dbsnp_vcf, build, dataset) {
     return(list(match_rate = 0, checked = nrow(candidates), mismatches = mismatches))
   }
   ref <- ref[grepl("^rs[0-9]+$", as.character(rsID), ignore.case = TRUE)]
-  ref <- unique(ref[, .(rsID = as.character(rsID), dbsnp_CHR = as.character(CHR), dbsnp_POS = as.integer(POS))])
-  merged <- merge(candidates, ref, by = "rsID", all.x = TRUE, allow.cartesian = TRUE)
+  ref <- unique(ref[, .(SNPID = as.character(rsID), dbsnp_CHR = as.character(CHR), dbsnp_POS = as.integer(POS))])
+  merged <- merge(candidates, ref, by = "SNPID", all.x = TRUE, allow.cartesian = TRUE)
   merged[, query_CHR := gsub("^chr", "", as.character(CHR), ignore.case = TRUE)]
   merged[, dbsnp_CHR_norm := gsub("^chr", "", as.character(dbsnp_CHR), ignore.case = TRUE)]
   merged[, position_match := !is.na(dbsnp_POS) & query_CHR == dbsnp_CHR_norm & as.integer(POS) == as.integer(dbsnp_POS)]
-  by_rsid <- merged[, .(
+  by_snpid <- merged[, .(
     position_match = any(position_match, na.rm = TRUE),
     query_CHR = first(query_CHR),
     query_POS = first(as.integer(POS)),
     dbsnp_positions = if (all(is.na(dbsnp_POS))) NA_character_ else paste(unique(paste0(dbsnp_CHR_norm[!is.na(dbsnp_POS)], ":", dbsnp_POS[!is.na(dbsnp_POS)])), collapse = ";")
-  ), by = rsID]
-  mismatches <- head(by_rsid[position_match == FALSE][,
-    .(dataset = dataset, rsID, query_CHR, query_POS, dbsnp_positions)
+  ), by = SNPID]
+  mismatches <- head(by_snpid[position_match == FALSE][,
+    .(dataset = dataset, SNPID, query_CHR, query_POS, dbsnp_positions)
   ], 25L)
   list(
-    match_rate = if (nrow(by_rsid) > 0) sum(by_rsid$position_match) / nrow(by_rsid) else NA_real_,
-    checked = nrow(by_rsid),
+    match_rate = if (nrow(by_snpid) > 0) sum(by_snpid$position_match) / nrow(by_snpid) else NA_real_,
+    checked = nrow(by_snpid),
     mismatches = mismatches
   )
 }
@@ -160,10 +170,8 @@ check_dbsnp_position_concordance <- function(dt, dbsnp_vcf, build, dataset) {
 qc_one_file <- function(file) {
   dataset <- sub("_b[0-9]+to[0-9]+_harmonized\\.tsv$", "", basename(file))
   ds <- dataset_by_id[[dataset]]
-  target_build <- "38"
-  dbsnp_vcf <- cfg_global$dbsnp_hg38 %||% ""
   header <- names(fread(file, nrows = 0, showProgress = FALSE))
-  required <- c("SNPID", "rsID", "variant_id", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P", "N")
+  required <- easycoloc_harmonized_gwas_output_cols()
   raw_schema_complete <- all(required %in% header)
   raw_missing_required <- paste(setdiff(required, header), collapse = ",")
   dt <- fread(file, nrows = sample_n, showProgress = FALSE)
@@ -176,13 +184,13 @@ qc_one_file <- function(file) {
   invalid_p <- if ("P" %in% names(dt)) sum(is.na(dt$P) | dt$P < 0 | dt$P > 1) else n
   invalid_se <- if ("SE" %in% names(dt)) sum(is.na(dt$SE) | dt$SE <= 0) else n
   missing_n <- if ("N" %in% names(dt)) sum(is.na(dt$N)) else n
-  has_rsid <- if ("rsID" %in% names(dt)) sum(!is.na(dt$rsID) & nzchar(as.character(dt$rsID)) & grepl("^rs[0-9]+$", as.character(dt$rsID), ignore.case = TRUE)) else 0L
+  has_rsid <- if ("SNPID" %in% names(dt)) sum(!is.na(dt$SNPID) & nzchar(as.character(dt$SNPID)) & grepl("^rs[0-9]+$", as.character(dt$SNPID), ignore.case = TRUE)) else 0L
   has_varid <- if ("variant_id" %in% names(dt)) sum(!is.na(dt$variant_id) & nzchar(as.character(dt$variant_id))) else 0L
   pal <- if (all(c("EA", "NEA") %in% names(dt))) sum(easycoloc_is_palindromic(dt$EA, dt$NEA), na.rm = TRUE) else NA_integer_
   liftover_mapped <- if ("LIFTOVER_MAPPED" %in% names(dt)) sum(dt$LIFTOVER_MAPPED %in% TRUE, na.rm = TRUE) else NA_integer_
   ref_match <- if ("REF_MATCH" %in% names(dt)) sum(dt$REF_MATCH %in% TRUE, na.rm = TRUE) else NA_integer_
   ref_checkable <- if ("REF_MATCH" %in% names(dt)) sum(!is.na(dt$REF_MATCH)) else NA_integer_
-  dbsnp_qc <- check_dbsnp_position_concordance(dt, dbsnp_vcf = dbsnp_vcf, build = target_build, dataset = dataset)
+  dbsnp_qc <- check_dbsnp_position_concordance(dt, dbsnp_vcf = dbsnp_vcf, build = target_build_num, dataset = dataset)
 
   summary <- data.table(
     dataset = dataset,
@@ -209,7 +217,7 @@ qc_one_file <- function(file) {
 
   flags <- dt[, .(
     dataset = dataset,
-    SNPID, rsID, variant_id, CHR, POS, EA, NEA, EAF, BETA, SE, P, N,
+    SNPID, variant_id, CHR, POS, EA, NEA, EAF, BETA, SE, P, N,
     invalid_EAF = is.na(EAF) | EAF < 0 | EAF > 1,
     invalid_P = is.na(P) | P < 0 | P > 1,
     invalid_SE = is.na(SE) | SE <= 0,
@@ -332,7 +340,7 @@ code {{ background: #f1f3f4; padding: 1px 4px; border-radius: 3px; }}
 </head>
 <body>
 <h1>EasyColoc Harmony QC Report</h1>
-<p class="meta">Generated: {generated_at}<br>Harmony directory: <code>{html_escape(harmony_dir)}</code><br>Rows sampled per dataset: <code>{sample_n}</code><br>dbSNP position check sample per dataset: <code>{dbsnp_sample_n}</code></p>
+<p class="meta">Generated: {generated_at}<br>Harmony directory: <code>{html_escape(harmony_dir)}</code><br>Target build: <code>{html_escape(target_build)}</code><br>Rows sampled per dataset: <code>{sample_n}</code><br>dbSNP position check sample per dataset: <code>{dbsnp_sample_n}</code></p>
 
 <div class="summary">
   <div class="card pass-badge"><div class="value">{sum(summary_dt$overall_status == "pass")}</div><div>Pass datasets</div></div>
@@ -343,7 +351,7 @@ code {{ background: #f1f3f4; padding: 1px 4px; border-radius: 3px; }}
 
 <div class="note">
 This report checks whether harmonized GWAS caches are suitable as shared upstream inputs for coloc, SMR, and sLDSC. 
-It evaluates the on-disk schema, EasyColoc canonical readability, N/EAF/P/SE validity, rsID and chr:pos:ref:alt availability, liftover markers, FASTA reference-match markers when present, and sampled rsID-to-position concordance against dbSNP hg38.
+It evaluates the on-disk schema, EasyColoc canonical readability, N/EAF/P/SE validity, SNPID and chr:pos:ref:alt availability, optional liftover/reference-match markers when present, and sampled SNPID-to-position concordance against the configured target-build dbSNP reference.
 </div>
 
 <h2>QC Status Matrix</h2>

@@ -200,7 +200,7 @@ if (identical(parsed$mode, "materialize")) {
   print(manifest)
 } else if (identical(parsed$mode, "fetch_gtex_meta")) {
   if (is.null(parsed$qtl_config_out) && !is.null(cfg_bundle)) {
-    parsed$qtl_config_out <- file.path(dirname(cfg_bundle$paths$qtl), "qtl_gtex_generated.yaml")
+    parsed$qtl_config_out <- file.path(dirname(cfg_bundle$paths$qtl), "qtl_gtex_generated.yml")
   }
   manifest <- easycoloc_fetch_gtex_meta(
     dest_dir = parsed$dest_dir,
