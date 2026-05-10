@@ -16,6 +16,10 @@
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
 }
 
+html {
+  overflow-wrap: break-word;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -32,6 +36,10 @@ body {
 button,
 input {
   font: inherit;
+}
+
+button {
+  min-width: 0;
 }
 
 a {
@@ -140,6 +148,7 @@ a {
   align-content: space-between;
   gap: 14px;
   padding: 20px;
+  min-width: 0;
 }
 
 .signal-card--primary {
@@ -152,6 +161,7 @@ a {
   color: inherit;
   opacity: 0.75;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .signal-card strong {
@@ -200,6 +210,7 @@ a {
   margin: 12px 0 0;
   color: var(--muted);
   max-width: 56ch;
+  overflow-wrap: anywhere;
 }
 
 .hero__note,
@@ -249,6 +260,7 @@ a {
   border: 1px solid var(--line);
   background: var(--panel-strong);
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 
 .metric-card--accent {
@@ -263,6 +275,7 @@ a {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.8;
+  overflow-wrap: anywhere;
 }
 
 .metric-card__value {
@@ -367,6 +380,7 @@ a {
   color: inherit;
   text-align: left;
   cursor: pointer;
+  min-width: 0;
 }
 
 .top-hit[data-active="true"] {
@@ -378,6 +392,14 @@ a {
 .top-hit strong,
 .top-hit small {
   display: block;
+  min-width: 0;
+}
+
+.top-hit span,
+.top-hit small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .top-hit small {
@@ -395,6 +417,7 @@ a {
 .results-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .results-table th,
@@ -402,7 +425,7 @@ a {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  white-space: nowrap;
+  vertical-align: top;
 }
 
 .results-table th {
@@ -413,6 +436,37 @@ a {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+  white-space: nowrap;
+}
+
+.results-table th:nth-child(1),
+.results-table th:nth-child(2),
+.results-table th:nth-child(4) {
+  width: 22%;
+}
+
+.results-table th:nth-child(3) {
+  width: 18%;
+}
+
+.results-table th:nth-child(5),
+.results-table th:nth-child(6) {
+  width: 8%;
+}
+
+.results-table__text-cell {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.results-table__text-cell--compact {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.92rem;
+}
+
+.results-table td:nth-child(5),
+.results-table td:nth-child(6) {
+  white-space: nowrap;
 }
 
 .results-table tbody tr {
@@ -451,6 +505,7 @@ a {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--line);
+  min-width: 0;
 }
 
 .detail-grid dt {
@@ -464,6 +519,7 @@ a {
 
 .detail-grid dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .detail-panel--empty {
@@ -533,9 +589,14 @@ a {
   background: rgba(248, 250, 250, 0.9);
 }
 
+.asset-list__item > div {
+  min-width: 0;
+}
+
 .asset-list__item strong,
 .asset-list__item p {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .asset-list__item p {
@@ -551,6 +612,10 @@ a {
   background: rgba(18, 110, 130, 0.1);
   text-decoration: none;
   font-weight: 700;
+}
+
+.asset-list__tag {
+  flex: none;
 }
 
 @media (max-width: 1080px) {

@@ -1,6 +1,6 @@
 # Fixture Design Notes
 
-The fixtures under `tests/fixtures/` are not arbitrary placeholders. They are
+The fixtures under `examples/fixtures/` are not arbitrary placeholders. They are
 small, synthetic inputs chosen to preserve the compatibility constraints that
 matter for scientific interpretation.
 
@@ -21,7 +21,7 @@ Files:
 ## Why These Match
 
 - The GTF fixture places `CCDC30` at the same `hg38 chr1` interval used by the
-  synthetic phenotype label in `tests/smoke_test_plotting.R`.
+  synthetic phenotype label in `tools/checks/smoke_test_plotting.R`.
 - The recombination fixture uses the repository's expected `hg38` HapMap-style
   naming convention and explicitly encodes the `CHB` population in the path and
   filename.

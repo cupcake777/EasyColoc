@@ -140,9 +140,9 @@ case "${cmd}" in
       export EASYCOLOC_OUTPUT_DIR="${COMMON_OUTPUT_DIR}"
     fi
     if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
-      exec Rscript run_coloc.r "${COMMON_PASSTHROUGH[@]}"
+      exec Rscript run_coloc.R "${COMMON_PASSTHROUGH[@]}"
     else
-      exec Rscript run_coloc.r
+      exec Rscript run_coloc.R
     fi
     ;;
   doctor)
@@ -207,15 +207,12 @@ EOF
     cat > "${target_dir}/README.md" <<EOF
 # EasyColoc Analysis Project
 
-Edit the files under \`config/\`, then run from the EasyColoc repository root:
+Edit \`config/*.yml\`, then run from the EasyColoc repository root:
 
 \`\`\`bash
 ./easycoloc doctor --global ${target_dir}/config/global.yml --gwas ${target_dir}/config/gwas.yml --qtl ${target_dir}/config/qtl.yml
 ./easycoloc run --managed --global ${target_dir}/config/global.yml --gwas ${target_dir}/config/gwas.yml --qtl ${target_dir}/config/qtl.yml
 \`\`\`
-
-Use \`data/gwas/\` for GWAS inputs and \`data/qtl/\` for tabix-indexed QTL files.
-Outputs are written to \`results/\`; temporary files are written to \`temp/\`.
 EOF
     echo "[INIT] wrote minimal project to ${target_dir}"
     echo "[INIT] next: edit ${target_dir}/config/*.yml and run ./easycoloc doctor --global ${target_dir}/config/global.yml --gwas ${target_dir}/config/gwas.yml --qtl ${target_dir}/config/qtl.yml"
@@ -263,7 +260,7 @@ EOF
     exec "${repo_root}/tools/run_smoke_checks.sh"
     ;;
   demo)
-    exec Rscript examples/minimal/synthetic_plot_demo.R
+    exec Rscript examples/synthetic_plot_demo.R
     ;;
   help|-h|--help)
     show_help

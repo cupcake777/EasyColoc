@@ -78,7 +78,7 @@ echo "[RUN] starting EasyColoc pipeline"
 EASYCOLOC_LOG_FILE="${log_file}" \
 EASYCOLOC_RUN_LABEL="${run_label}" \
 EASYCOLOC_PARENT_PID="$$" \
-Rscript run_coloc.r > "${log_file}" 2>&1 &
+Rscript run_coloc.R > "${log_file}" 2>&1 &
 run_pid=$!
 
 cleanup() {

@@ -10,7 +10,7 @@ source("src/utils_plot.R")
 source("src/utils_output.R")
 
 cfg_global <- yaml::read_yaml("config/global.yml")
-fixture_dir <- file.path("tests", "fixtures")
+fixture_dir <- file.path("examples", "fixtures")
 
 resolve_existing_file <- function(paths) {
   paths <- Filter(function(path) !is.null(path) && nzchar(path), paths)

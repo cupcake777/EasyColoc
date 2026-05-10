@@ -38,10 +38,12 @@ export function ResultsTable({ rows, selectedKey, onSelect }: ResultsTableProps)
                   data-selected={selectedKey === key}
                   onClick={() => onSelect(row)}
                 >
-                  <td>{row.gwas_id}</td>
-                  <td>{row.qtl_id}</td>
-                  <td>{row.locus}</td>
-                  <td>{row.phenotype}</td>
+                  <td className="results-table__text-cell">{row.gwas_id}</td>
+                  <td className="results-table__text-cell">{row.qtl_id}</td>
+                  <td className="results-table__text-cell results-table__text-cell--compact">
+                    {row.locus}
+                  </td>
+                  <td className="results-table__text-cell">{row.phenotype}</td>
                   <td>{formatPp4(row.pp4)}</td>
                   <td>{row.n_snps}</td>
                 </tr>

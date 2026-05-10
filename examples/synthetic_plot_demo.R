@@ -8,7 +8,7 @@ utils_files <- list.files("src", pattern = "^utils_.*\\.R$", full.names = TRUE)
 invisible(lapply(utils_files, source))
 
 cfg_global <- yaml::read_yaml("config/global.yml")
-fixture_dir <- file.path("tests", "fixtures")
+fixture_dir <- file.path("examples", "fixtures")
 
 resolve_existing_file <- function(paths) {
   paths <- Filter(function(path) !is.null(path) && nzchar(path), paths)
@@ -85,7 +85,7 @@ plot_obj <- plot_qtl_association(
   plot_window_bp = 200000
 )
 
-output_dir <- "examples/minimal/output"
+output_dir <- "examples/output"
 if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
 
 save_res <- save_plot_with_fallback(

@@ -1,174 +1,169 @@
 # EasyColoc
 
-EasyColoc is a GWAS-to-QTL colocalization pipeline. It standardizes GWAS
-summary statistics, queries tabix-indexed QTL resources, runs coloc ABF and
-optional SuSiE follow-up, then writes tables, locus plots, RDS bundles, runtime
-state, and an HTML report.
+EasyColoc is a command-line pipeline for GWAS-to-QTL colocalization. It takes GWAS summary statistics and tabix-indexed QTL files, harmonizes variants, runs coloc ABF analysis, optionally runs SuSiE follow-up, and writes tables, plots, reports, and reusable R objects.
 
 <p align="center">
-  <img src="docs/assets/synthetic_locus_demo.png" alt="EasyColoc synthetic locus panel" width="540">
+  <img src="docs/synthetic_locus_demo.png" alt="EasyColoc synthetic locus panel" width="540">
 </p>
 
 ## What It Does
 
-- supports explicit `hg19` and `hg38` GWAS/QTL builds
-- harmonizes GWAS inputs with the native EasyColoc harmonizer
-- discovers loci with PLINK clumping on build-matched LD panels
-- queries QTL allPairs/sigPairs files through tabix
-- matches variants by rsID, hash/position rescue, or position plus alleles
-- runs coloc ABF and writes optional SuSiE summaries
-- generates runtime state, output manifests, plots, RDS files, and reports
-
-## Repository Structure
-
-| Path | Purpose |
-| --- | --- |
-| `easycoloc` | Unified command-line entrypoint |
-| `run_coloc.r` | Main pipeline runner |
-| `src/` | R modules for config, harmonization, matching, coloc, plotting, reporting, and runtime state |
-| `tools/` | Operational helpers: doctor, refs, bootstrap, monitor, manifest, report-web, harmony QC |
-| `config/` | Portable default configs and metadata tables |
-| `tests/` | Parse checks, smoke tests, and small fixtures |
-| `docs/` | Tutorial, architecture, reference setup, and Docker notes |
-| `examples/` | Minimal synthetic plotting demo |
-| `web/` | Local interactive report UI source |
-
-Local run artifacts are ignored by git and may appear after analysis:
-`results/`, `temp/`, `harmony/`, `logs/`, `data/`, `config/local/`, `web/dist/`, and
-`web/node_modules/`.
+- Checks that your GWAS, QTL, LD panel, allele-frequency, and annotation files are consistent.
+- Handles `hg19` and `hg38` inputs explicitly, so coordinate-build mistakes are easier to catch.
+- Harmonizes GWAS variants and reuses harmonized cache files across runs.
+- Queries QTL `allPairs` and `sigPairs` files efficiently with tabix.
+- Produces coloc result tables, locus plots, static HTML summaries, and an interactive local report.
 
 ## Install
+
+Use `micromamba`, `mamba`, or `conda`:
 
 ```bash
 micromamba create -f environment.yml
 micromamba activate easycoloc
 ```
 
-Then verify the repository:
+Check that the command-line tools and R packages are available:
 
 ```bash
 ./easycoloc doctor
+```
+
+For a fuller repository self-check, run:
+
+```bash
 ./easycoloc smoke
 ```
 
-## Quick Demo
+## Try The Demo
 
-Create and run a self-contained toy project:
+This creates a small self-contained project and runs it:
 
 ```bash
 ./easycoloc bootstrap-refs --demo ./demo_quickstart --run
 ```
 
-Expected key outputs:
+After it finishes, open or inspect:
 
-- `demo_quickstart/results/coloc_report.html`
-- `demo_quickstart/results/all_colocalization_results.csv`
-- `demo_quickstart/results/plots/*.pdf`
-- `demo_quickstart/results/rds/*.rds`
+| Output | Location |
+| --- | --- |
+| HTML report | `demo_quickstart/results/coloc_report.html` |
+| Main coloc table | `demo_quickstart/results/all_colocalization_results.csv` |
+| Significant hits | `demo_quickstart/results/significant_colocalizations_PP4_*.csv` |
+| Locus plots | `demo_quickstart/results/plots/` |
+| Saved R objects | `demo_quickstart/results/rds/` |
 
-## Typical Real Run
+## Run Your Own Data
 
-1. Prepare or bootstrap references.
-2. Edit `config/global.yml`, `config/gwas.yml`, and `config/qtl.yml`, or use
-   private overrides under `config/local/`.
-3. Check paths and tools.
-4. Run the pipeline.
-5. Inspect outputs or launch the report web UI.
+1. Create a clean project directory:
 
 ```bash
-./easycoloc refs --include-qtl-files
-./easycoloc doctor
-./easycoloc run --managed
-./easycoloc report-web results
+./easycoloc init /path/to/my_easycoloc_project
 ```
 
-For machine-specific paths:
+2. Edit the three YAML files in that project:
+
+| File | What you set there |
+| --- | --- |
+| `config/global.yml` | output directory, reference files, thresholds, plotting options |
+| `config/gwas.yml` | GWAS file paths, column names, build, population, sample size |
+| `config/qtl.yml` | QTL metadata, tabix file columns, QTL build, QTL phenotype mapping |
+
+3. List required files, then validate the paths and settings:
+
+```bash
+./easycoloc refs \
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml \
+  --include-qtl-files
+
+./easycoloc doctor \
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml
+```
+
+4. Run the analysis:
 
 ```bash
 ./easycoloc run --managed \
-  --global config/local/global.yml \
-  --gwas config/local/gwas.yml \
-  --qtl config/local/qtl.yml
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml \
+  --output-dir /path/to/my_easycoloc_project/results
 ```
 
-## Main Commands
-
-| Command | Purpose |
-| --- | --- |
-| `./easycoloc run [--managed]` | Run the coloc pipeline |
-| `./easycoloc doctor` | Validate configs, input paths, references, and tools |
-| `./easycoloc refs [--include-qtl-files]` | List required reference resources |
-| `./easycoloc bootstrap-refs ...` | Materialize references or create demo projects |
-| `./easycoloc check RESULTS_DIR` | Check whether a run completed cleanly |
-| `./easycoloc status RESULTS_DIR` | Summarize outputs and task state |
-| `./easycoloc monitor RESULTS_DIR` | Print a runtime/output snapshot |
-| `./easycoloc watch RESULTS_DIR [SECONDS] [LOG]` | Poll monitor snapshots repeatedly |
-| `./easycoloc manifest RESULTS_DIR` | Build an output manifest |
-| `./easycoloc harmony-qc ...` | QC reusable harmonized GWAS caches |
-| `./easycoloc report-web RESULTS_DIR` | Launch the local interactive report |
-| `./easycoloc init TARGET_DIR` | Scaffold a portable project |
-| `./easycoloc smoke` | Run the standard smoke suite |
-
-## Harmonized GWAS QC
-
-EasyColoc stores reusable GWAS harmonization caches in `harmony/`. The current
-canonical schema includes:
-
-```text
-SNPID variant_id CHR POS EA NEA EAF BETA SE P N
-```
-
-Run QC after cache generation:
+5. Check the run and open the report:
 
 ```bash
-./easycoloc harmony-qc \
-  --global config/global.yml \
-  --gwas config/gwas.yml \
-  --qtl config/qtl.yml \
-  --output-dir results/harmony_qc \
-  --sample-n 200000 \
-  --dbsnp-sample-n 5000
+./easycoloc check /path/to/my_easycoloc_project/results
+./easycoloc report-web /path/to/my_easycoloc_project/results
 ```
 
-The QC command writes an HTML report plus TSV summaries under the selected
-output directory.
-
-## Key Outputs
+## Main Outputs
 
 | Output | Meaning |
 | --- | --- |
-| `all_colocalization_results.csv` | Merged ABF coloc results |
-| `significant_colocalizations_PP4_*.csv` | PP4-thresholded hits |
-| `all_susie_results.csv` | Merged SuSiE summaries, when available |
-| `plots/*.pdf` or `plots/*.png` | Locus plots |
-| `rds/*.rds` | Serialized locus bundles |
-| `coloc_report.html` | Static HTML report |
-| `report_web/report-data.json` | Data payload for the local report UI |
-| `runtime/` | Heartbeat, event log, and task state |
-| `output_manifest.tsv` | Inventory of generated outputs |
+| `all_colocalization_results.csv` | all merged coloc ABF results |
+| `significant_colocalizations_PP4_*.csv` | coloc hits passing the configured PP4 threshold |
+| `all_susie_results.csv` | SuSiE summaries, if SuSiE is enabled |
+| `plots/` | regional locus plots |
+| `rds/` | saved R objects for downstream inspection and plot regeneration |
+| `coloc_report.html` | static HTML report |
+| `report_web/report-data.json` | data file used by the interactive report UI |
+| `runtime/` | heartbeat, event log, and task-state files for monitoring |
+| `output_manifest.tsv` | inventory of generated files |
 
-## Documentation
+## Common Commands
+
+| Command | Use it when you want to |
+| --- | --- |
+| `./easycoloc init TARGET_DIR` | create a new analysis project |
+| `./easycoloc refs --include-qtl-files` | list required reference and QTL files |
+| `./easycoloc doctor` | validate config paths, tools, and reference files |
+| `./easycoloc run --managed` | run the full pipeline with managed logs and runtime state |
+| `./easycoloc status RESULTS_DIR` | summarize progress and output counts |
+| `./easycoloc monitor RESULTS_DIR` | print the latest runtime snapshot |
+| `./easycoloc check RESULTS_DIR` | check whether a run completed cleanly |
+| `./easycoloc manifest RESULTS_DIR` | build an output manifest |
+| `./easycoloc report-web RESULTS_DIR` | launch the local interactive report |
+| `./easycoloc harmony-qc ...` | build QC summaries for harmonized GWAS cache files |
+| `./easycoloc smoke` | run the repository smoke tests |
+
+## Reference Data Checklist
+
+Before a real run, make sure these match the same genome build and population assumptions:
+
+| Item | Config location |
+| --- | --- |
+| GWAS build | `gwas.yml -> datasets[].build` |
+| QTL build | `qtl.yml -> qtl_info.build` |
+| LD panel | `global.yml -> plink_hg19` or `global.yml -> plink_hg38` |
+| LD sample list | `global.yml -> plink_keep` |
+| allele frequency | `global.yml -> 1kg_af` |
+| gene annotation | `global.yml -> gene_anno` |
+| recombination map | `global.yml -> recom` |
+
+Do not mix `hg19` and `hg38` coordinates unless the input has been lifted over and checked.
+
+## More Documentation
 
 - [Tutorial](docs/TUTORIAL.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Reference data](docs/REFERENCE_DATA.md)
-- [Reference compatibility](docs/REFERENCE_COMPATIBILITY.md)
-- [Docker](docs/DOCKER.md)
-- [Config layout](config/README.md)
-- [Tests](tests/README.md)
+- [Architecture notes](docs/ARCHITECTURE.md)
+- [Example fixtures](examples/README.md)
 
-## Validation
+## Maintainer Checks
 
-Run the full local smoke suite:
+Before changing code, run at least:
+
+```bash
+Rscript tools/checks/check_parse.R
+bash examples/checks/check_cli.sh
+```
+
+If the local environment is fully configured, also run:
 
 ```bash
 ./easycoloc smoke
-```
-
-If localhost sockets are unavailable, use the lighter subset:
-
-```bash
-Rscript tests/check_parse.R
-bash tests/smoke_test_cli.sh
-Rscript tests/smoke_test_report_web_data.R
 ```

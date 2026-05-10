@@ -1,18 +1,14 @@
-# =============================================================================
-# EasyColoc Docker Image
-# =============================================================================
-# A complete, reproducible environment for colocalization analysis
-# Includes: R, Python, PLINK, Tabix, and all dependencies
+# EasyColoc Docker image
 #
 # Build:
 #   docker build -t easycoloc:latest .
 #
 # Run:
-#   docker run -v /path/to/data:/data -v /path/to/results:/results easycoloc:latest
+#   docker run -v /path/to/project:/work -v /path/to/ref:/ref:ro easycoloc:latest run --managed \
+#     --global /work/config/global.yml --gwas /work/config/gwas.yml --qtl /work/config/qtl.yml --output-dir /work/results
 #
 # Interactive:
-#   docker run -it -v /path/to/data:/data easycoloc:latest bash
-# =============================================================================
+#   docker run -it --entrypoint bash -v /path/to/project:/work easycoloc:latest
 
 FROM rocker/verse:4.3.2
 
@@ -20,17 +16,12 @@ LABEL maintainer="EasyColoc Team"
 LABEL description="Fast and easy-to-use colocalization analysis pipeline"
 LABEL version="1.0"
 
-# =============================================================================
-# Environment Variables
-# =============================================================================
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-# =============================================================================
 # System Dependencies
-# =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Build tools
     build-essential \
@@ -63,9 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# =============================================================================
 # R Package Dependencies
-# =============================================================================
 # Install Bioconductor manager first
 RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')"
 
@@ -153,8 +142,8 @@ WORKDIR /opt
 COPY . /opt/EasyColoc
 WORKDIR /opt/EasyColoc
 
-# Make scripts executable
-RUN chmod +x tools/batch_run.sh
+# Make CLI entrypoints executable
+RUN chmod +x easycoloc tools/*.sh
 
 # =============================================================================
 # Default Working Directory
@@ -164,7 +153,7 @@ WORKDIR /data
 # =============================================================================
 # Entrypoint
 # =============================================================================
-ENTRYPOINT ["Rscript", "/opt/EasyColoc/run_coloc.r"]
+ENTRYPOINT ["/opt/EasyColoc/easycoloc"]
 
 # =============================================================================
 # Health Check
@@ -181,12 +170,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 #   docker build -t easycoloc:latest .
 #
 # Run with mounted volumes:
-#   docker run -v /host/data:/data -v /host/results:/results easycoloc:latest
+#   docker run -v /host/project:/work -v /host/ref:/ref:ro easycoloc:latest doctor \
+#     --global /work/config/global.yml --gwas /work/config/gwas.yml --qtl /work/config/qtl.yml
 #
 # Run interactively:
-#   docker run -it -v /host/data:/data easycoloc:latest bash
+#   docker run -it --entrypoint bash -v /host/project:/work easycoloc:latest
 #
-# Run batch processing:
-#   docker run -v /host/config:/config -v /host/results:/results \
+# Run a managed project:
+#   docker run -v /host/project:/work -v /host/ref:/ref:ro easycoloc:latest \
+#     run --managed --global /work/config/global.yml --gwas /work/config/gwas.yml --qtl /work/config/qtl.yml --output-dir /work/results
 #
 # =============================================================================

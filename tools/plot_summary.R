@@ -849,7 +849,7 @@ main <- function() {
         rds_dir <- file.path(opts$results_dir, "rds")
         if (!dir.exists(rds_dir)) {
             message("[WARN] RDS directory not found: ", rds_dir)
-            message("[HINT] Re-run the pipeline to generate RDS files (run_coloc.r now saves them automatically)")
+            message("[HINT] Re-run the pipeline to generate RDS files (run_coloc.R now saves them automatically)")
             message("[HINT] RDS files are required for the locuscomparer-style mini plots")
         } else {
             n_rds <- length(list.files(rds_dir, pattern = "\\.rds$"))

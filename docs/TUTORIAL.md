@@ -1,87 +1,85 @@
-# Tutorial
+# EasyColoc Tutorial
 
-This guide is organized by common usage scenarios so you can jump directly to
-the path you need.
+This tutorial is for users who want to run EasyColoc on real GWAS and QTL data. Start with the demo if this is your first time using the repository.
 
-## Scenario 1. Open An Existing Results Directory
+## 1. Install And Check The Environment
 
-If you already have a completed `results/` directory from EasyColoc, start here:
+EasyColoc expects these command-line tools to be available: `Rscript`, `plink`, `bgzip`, and `tabix`.
 
-```bash
-./easycoloc report-web /path/to/results
-```
-
-This command prepares report payload data and starts a local report server for
-interactive browsing.
-It generates or refreshes `report_web/report-data.json` under the target
-results directory before launching the server.
-
-## Scenario 2. First-Time Environment Setup
-
-### Required tools
-
-EasyColoc expects these tools to be available locally:
-
-- `Rscript`
-- `plink`
-- `bgzip`
-- `tabix`
-
-For the full GWAS harmonization path, you also want:
-
-- reference FASTA/AF/dbSNP/liftOver assets for native EasyColoc harmonization
-- reference FASTA/dbSNP resources
-
-Recommended first checks:
-
-```bash
-./easycoloc refs
-./easycoloc doctor
-```
-
-### Optional quick validation
+Create the environment:
 
 ```bash
 micromamba create -f environment.yml
 micromamba activate easycoloc
+```
+
+Check the installation:
+
+```bash
+./easycoloc doctor
+```
+
+Run the repository smoke tests when you want a fuller check:
+
+```bash
 ./easycoloc smoke
 ```
 
-Most smoke checks run in standard local setups. The report web CLI smoke step
-starts a localhost server and may require additional local network permission
-in restricted sandboxes.
-This now includes `tests/smoke_test_report_web_cli.sh`, so you must be able to bind
-and connect to localhost/socket ports or the smoke step will fail.
+## 2. Run The Demo First
 
-## Scenario 3. Demo In Under Two Minutes
-
-Create a fully self-contained project and run it immediately:
+The demo is the fastest way to see what a successful run looks like:
 
 ```bash
 ./easycoloc bootstrap-refs --demo ./demo_quickstart --run
 ```
 
-After it finishes, inspect:
+Useful demo outputs:
 
-- `demo_quickstart/results/coloc_report.html`
-- `demo_quickstart/results/all_colocalization_results.csv`
-- `demo_quickstart/results/all_susie_results.csv`
-
-This is the fastest way to confirm that your local EasyColoc installation,
-`plink`, `bgzip`, and `tabix` are working together.
-
-## Scenario 4. Choose Your Starting Mode
-
-| Situation | Best next step |
+| File or directory | What it is |
 | --- | --- |
-| You only want to validate the repo | Run `./easycoloc smoke` (note: report web CLI smoke may need localhost permission in restricted sandboxes) |
-| You need a portable starter project | Run `./easycoloc init <dir>` |
-| You already have reference assets | Edit the portable defaults in `config/*.yml` or create private overrides in `config/local/` |
-| You need local 1KG or GTEx support files | Use `bootstrap-refs` as shown below |
+| `demo_quickstart/results/coloc_report.html` | static HTML summary |
+| `demo_quickstart/results/all_colocalization_results.csv` | full coloc result table |
+| `demo_quickstart/results/significant_colocalizations_PP4_*.csv` | thresholded coloc hits |
+| `demo_quickstart/results/plots/` | locus plots |
+| `demo_quickstart/results/rds/` | saved R objects for reuse |
 
-## Scenario 5. Build A Real 1000 Genomes Reference
+If the demo runs, the software stack is basically working.
 
-### hg19 example
+## 3. Create A Project For Your Data
+
+Create a separate analysis folder instead of editing the repository defaults directly:
+
+```bash
+./easycoloc init /path/to/my_easycoloc_project
+```
+
+The new project contains:
+
+| Path | Purpose |
+| --- | --- |
+| `config/global.yml` | output directory, reference files, thresholds, plot settings |
+| `config/gwas.yml` | GWAS datasets, column names, genome build, sample size |
+| `config/qtl.yml` | QTL metadata table, tabix file columns, QTL build |
+| `data/` | a place to keep project input files |
+| `results/` | recommended output directory |
+
+## 4. Prepare The Inputs
+
+For a real run, you need three groups of files:
+
+| Input type | Examples |
+| --- | --- |
+| GWAS summary statistics | one or more GWAS files with SNP, chromosome, position, alleles, effect, SE, P value, and sample size information |
+| QTL resources | tabix-indexed QTL `allPairs` files, optional `sigPairs` files, and a metadata table describing them |
+| References | PLINK LD panel, allele frequency, reference genome, dbSNP, gene annotation, and optional recombination map |
+
+The most important rule is that coordinates must be explicit. Record whether each GWAS and QTL file is `hg19` or `hg38`, and make the LD panel match the analysis build.
+
+## 5. Optional: Build 1000 Genomes LD References
+
+If you do not already have PLINK LD panels, EasyColoc can prepare them from 1000 Genomes data.
+
+For `hg19`:
 
 ```bash
 ./easycoloc bootstrap-refs \
@@ -91,7 +89,7 @@ This is the fastest way to confirm that your local EasyColoc installation,
   --chromosomes 1-22
 ```
 
-### hg38 example
+For `hg38`:
 
 ```bash
 ./easycoloc bootstrap-refs \
@@ -101,18 +99,11 @@ This is the fastest way to confirm that your local EasyColoc installation,
   --chromosomes 1-22
 ```
 
-What this does:
+Use the population code that matches your GWAS as closely as possible.
 
-- downloads build-specific 1000 Genomes VCFs with resumable transfer
-- converts them to PLINK
-- creates a population-specific `.sample` keep file
+## 6. Optional: Build GTEx Metadata
 
-If you want EasyColoc to wire the resulting panel into your config automatically,
-run the same command with `--rewrite-config` and pass your config paths.
-
-## Scenario 6. Prepare GTEx Metadata
-
-If you already have local GTEx QTL files:
+If your QTL data are local GTEx files, this helper creates a starting QTL config:
 
 ```bash
 ./easycoloc bootstrap-refs \
@@ -121,112 +112,107 @@ If you already have local GTEx QTL files:
   --gtex-sqtl-dir /path/to/gtex/sqtl
 ```
 
-This writes:
+The command writes GTEx sample metadata, summary CSV files, and `qtl_gtex_generated.yml`.
 
-- `GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt`
-- `GTEx_v8_eQTL_summary.csv`
-- `GTEx_v8_sQTL_summary.csv`
-- `qtl_gtex_generated.yml` in the selected metadata output directory
+## 7. Edit The Configs
 
-Use the generated YAML as a starting point for GTEx-based analyses.
+Edit the config files in your project:
 
-## Scenario 7. Prepare Your Configs
-
-The minimum files to review are:
-
-- `config/global.yml`
-- `config/gwas.yml`
-- `config/qtl.yml`
-- `config/README.md`
-
-| File | Main responsibility |
-| --- | --- |
-| `config/global.yml` | output paths, references, coloc thresholds, plotting, runtime behavior |
-| `config/gwas.yml` | GWAS datasets, build, population, trait type, sample size, column mapping |
-| `config/qtl.yml` | QTL build, metadata table, allPairs/sigPairs columns, downstream field mapping |
-
-Common fields to confirm:
-
-- `plink_hg19` / `plink_hg38`
-- `plink_keep`
-- `1kg_af`
-- `dbsnp_hg19` / `dbsnp_hg38`
-- `qtl_info.file`
-
-Run:
-
-```bash
-./easycoloc refs --include-qtl-files
-./easycoloc doctor
+```text
+/path/to/my_easycoloc_project/config/global.yml
+/path/to/my_easycoloc_project/config/gwas.yml
+/path/to/my_easycoloc_project/config/qtl.yml
 ```
 
-If you do not want to commit machine-specific paths, put private copies in
-`config/local/` and pass them with `--global`, `--gwas`, and `--qtl`.
+Use `global.yml` for shared settings and reference paths. Use `gwas.yml` for GWAS file paths and column mapping. Use `qtl.yml` for QTL file metadata and tabix columns.
 
-## Scenario 8. Full Pipeline Run
-
-For routine work, prefer the managed wrapper:
+Before running, ask EasyColoc to show what files it expects:
 
 ```bash
-./easycoloc run --managed
+./easycoloc refs \
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml \
+  --include-qtl-files
 ```
 
-Or run against explicit config files:
+Then validate the configuration:
+
+```bash
+./easycoloc doctor \
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml
+```
+
+Do not start a long run until `doctor` reports that the required files and tools are available.
+
+## 8. Run The Pipeline
+
+Use managed mode for normal work. It writes logs and runtime state files that make monitoring and debugging easier.
 
 ```bash
 ./easycoloc run --managed \
-  --global /path/to/global.yml \
-  --gwas /path/to/gwas.yml \
-  --qtl /path/to/qtl.yml
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml \
+  --output-dir /path/to/my_easycoloc_project/results
 ```
 
-What happens during the run:
+## 9. Monitor Or Check A Run
 
-1. EasyColoc harmonizes GWAS input when required.
-2. Significant loci are discovered with PLINK clumping.
-3. QTL datasets are prefiltered with `sigPairs` when available.
-4. Variant matching is performed by rsID, hash rescue, or allele-aware position matching.
-5. ABF coloc runs first; SuSiE follows when signal and LD support it.
-6. Plots, RDS bundles, merged summaries, and an HTML report are written.
-
-## Scenario 9. Inspect Progress And Results
-
-During or after the run:
+During or after a run:
 
 ```bash
-./easycoloc status /path/to/output_dir
-./easycoloc monitor /path/to/output_dir
-./easycoloc watch /path/to/output_dir 60 logs/monitor/current_run.log
-./easycoloc check /path/to/output_dir
-./easycoloc manifest /path/to/output_dir
+./easycoloc status /path/to/my_easycoloc_project/results
+./easycoloc monitor /path/to/my_easycoloc_project/results
+./easycoloc check /path/to/my_easycoloc_project/results
 ```
 
-`watch` is useful when the results directory is outside the current project
-tree or should remain read-only during auditing. It writes snapshots to a local
-log file instead of mutating the target output directory.
+To save repeated monitor snapshots to a log file:
 
-| File | Why you care |
+```bash
+./easycoloc watch /path/to/my_easycoloc_project/results 60 logs/monitor/my_run.log
+```
+
+## 10. Review Results
+
+Open the static report:
+
+```text
+/path/to/my_easycoloc_project/results/coloc_report.html
+```
+
+Or launch the local interactive report:
+
+```bash
+./easycoloc report-web /path/to/my_easycoloc_project/results
+```
+
+The main result files are:
+
+| File | What to look for |
 | --- | --- |
-| `all_colocalization_results.csv` | complete merged coloc table |
-| `significant_colocalizations_PP4_*.csv` | thresholded candidate hits |
-| `all_susie_results.csv` | merged fine-mapping output |
-| `coloc_report.html` | quick visual review for handoff or audit |
+| `all_colocalization_results.csv` | all coloc tests and posterior probabilities |
+| `significant_colocalizations_PP4_*.csv` | strongest candidate colocalizations |
+| `all_susie_results.csv` | SuSiE fine-mapping summaries, if enabled |
+| `plots/` | regional views of GWAS and QTL signals |
+| `output_manifest.tsv` | list of generated output files |
 
-## Scenario 10. Regenerate Plots Without Re-running Coloc
+## 11. Regenerate Plots
 
-If RDS bundles already exist:
+If the run already produced RDS bundles and you only changed plot settings, regenerate plots without rerunning the full coloc analysis:
 
 ```bash
 Rscript tools/rerun_plots.R
 ```
 
-This regenerates locus plots from saved RDS objects without rerunning the whole
-pipeline.
-
-## Scenario 11. Common Failure Modes
+## 12. Common Problems
 
 | Symptom | What to check |
 | --- | --- |
-| `plink` missing | Ensure `plink` is on `$PATH`; bootstrap and clumping require it |
-| QTL files present but no output | Confirm `qtl_info.file`, `allPairsTabixFilename`, and `sigPairsTabixFilename`, and verify `sigPairs` is not filtering every locus |
-| Build mismatch | Match `qtl_info.build: hg19` to `plink_hg19`, and `qtl_info.build: hg38` to `plink_hg38` |
+| `plink` is missing | Make sure the environment is active and `plink` is on `$PATH`. |
+| `doctor` reports missing files | Run `./easycoloc refs --include-qtl-files` with the same config paths and fix the listed paths. |
+| QTL files exist but no loci are tested | Check `qtl_info.file`, `allPairsTabixFilename`, `sigPairsTabixFilename`, and whether `sigPairs` filtering is too strict. |
+| Results look shifted or empty | Recheck `hg19` versus `hg38` for GWAS, QTL, LD panel, allele frequency, annotation, and recombination map. |
+| Interactive report does not open | Use the static `coloc_report.html`, or rerun `./easycoloc report-web RESULTS_DIR --no-open` and open the printed URL manually. |

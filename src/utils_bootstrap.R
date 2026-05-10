@@ -171,7 +171,7 @@ easycoloc_build_hash_tables <- function(bed_dir, target_dir, build = "hg38", for
   if (isTRUE(force)) {
     unlink(file.path(target_dir, "chr_*_hash_table.rds"))
   }
-  cmd <- c("tools/bed2rds.r", "-i", bed_dir, "-o", target_dir, "-b", build)
+  cmd <- c("tools/bed2rds.R", "-i", bed_dir, "-o", target_dir, "-b", build)
   exit_code <- system2("Rscript", cmd)
   if (!identical(exit_code, 0L)) {
     stop("Hash table build failed for: ", bed_dir, call. = FALSE)

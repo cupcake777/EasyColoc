@@ -137,6 +137,57 @@ check_plink_prefix <- function(prefix_path) {
   invisible(FALSE)
 }
 
+check_recomb_prefix <- function(recom_value, item = "recombination_map", required = FALSE) {
+  if (is.list(recom_value)) {
+    if (length(recom_value) == 0) {
+      if (required) {
+        record_check("FAIL", "reference", item, "path is missing")
+      } else {
+        record_check("WARN", "reference", item, "path not configured")
+      }
+      return(invisible(FALSE))
+    }
+    ok <- TRUE
+    for (path_name in names(recom_value)) {
+      child_item <- if (nzchar(path_name)) paste0(item, "_", path_name) else item
+      child_ok <- check_recomb_prefix(
+        recom_value[[path_name]],
+        item = child_item,
+        required = required
+      )
+      ok <- ok && isTRUE(child_ok)
+    }
+    return(invisible(ok))
+  }
+
+  if (is.null(recom_value) || length(recom_value) == 0 || is.na(recom_value) || !nzchar(recom_value)) {
+    if (required) {
+      record_check("FAIL", "reference", item, "path is missing")
+    } else {
+      record_check("WARN", "reference", item, "path not configured")
+    }
+    return(invisible(FALSE))
+  }
+
+  chroms <- as.character(seq_len(22))
+  expected_files <- c(
+    paste0(recom_value, "_recombination_map_hapmap_format_hg38_chr_", chroms, ".txt"),
+    paste0(recom_value, "_recombination_map_hg38_chr_", chroms, ".bed")
+  )
+  if (any(file.exists(expected_files))) {
+    record_check("OK", "reference", item, recom_value)
+    return(invisible(TRUE))
+  }
+
+  detail <- paste0("missing recombination map files for prefix ", recom_value)
+  if (required) {
+    record_check("FAIL", "reference", item, detail)
+  } else {
+    record_check("WARN", "reference", item, detail)
+  }
+  invisible(FALSE)
+}
+
 check_required_names <- function(x, required_names, category, item) {
   missing <- setdiff(required_names, names(x))
   if (length(missing) == 0) {
@@ -193,7 +244,7 @@ if (!is.null(cfg_global$output_dir) && nzchar(cfg_global$output_dir)) {
 
 check_plink_prefix(cfg_global$plink_hg38)
 check_scalar_path(cfg_global$plink_keep, "reference", "plink_keep", required = FALSE)
-check_scalar_path(cfg_global$recom, "reference", "recombination_map", required = FALSE)
+check_recomb_prefix(cfg_global$recom, "recombination_map", required = FALSE)
 check_scalar_path(cfg_global$gene_anno, "reference", "gene_annotation", required = FALSE)
 check_scalar_path(cfg_global$ref_genome_hg19, "reference", "ref_genome_hg19", required = FALSE)
 check_scalar_path(cfg_global$ref_genome_hg38, "reference", "ref_genome_hg38", required = FALSE)

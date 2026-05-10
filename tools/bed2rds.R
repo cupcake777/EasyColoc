@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
-# bed2rds.r - Convert dbSNP BED files directly to RDS hash tables
-# Merged from dbsnp_hash_table_maker.py + hash2rds.r
+# bed2rds.R - Convert dbSNP BED files directly to RDS hash tables
+# Merged from dbsnp_hash_table_maker.py + hash2rds.R
 # Author: EasyColoc
 
 suppressPackageStartupMessages({
@@ -9,15 +9,15 @@ suppressPackageStartupMessages({
   library(jsonlite)
 })
 
-BED_DIR <- "/home/ycl/work/coloc/snp_ref"
-OUT_DIR <- "/home/ycl/work/coloc/snp_ref"
+BED_DIR <- "."
+OUT_DIR <- "."
 BUILD <- "hg38"
 
 usage <- function() {
-  cat("Usage: Rscript bed2rds.r [OPTIONS]\n\n")
+  cat("Usage: Rscript bed2rds.R [OPTIONS]\n\n")
   cat("Convert dbSNP BED files directly to RDS hash tables.\n\n")
   cat("Options:\n")
-  cat("  -i, --input DIR    Input directory containing BED files (default: ~/work/coloc/snp_ref)\n")
+  cat("  -i, --input DIR    Input directory containing BED files (default: current directory)\n")
   cat("  -o, --output DIR   Output directory for RDS files (default: same as input)\n")
   cat("  -b, --build BUILD  Genome build: hg38 or hg19 (default: hg38)\n")
   cat("  -h, --help         Show this help message\n")
@@ -28,16 +28,22 @@ args <- commandArgs(trailingOnly = TRUE)
 
 if (any(c("-h", "--help") %in% args)) usage()
 
-parse_arg <- function(arg) {
-  idx <- which(args %in% c(arg, paste0(arg, "=")))
-  if (length(idx) > 0) {
-    val <- args[idx + 1]
-    if (substr(val, 1, 1) == "-") val <- args[idx]
-    val <- sub(paste0(arg, "="), "", val)
-    if (substr(val, 1, 1) == "-") return(NULL)
-    return(val)
+parse_arg <- function(flags) {
+  for (flag in flags) {
+    exact_idx <- which(args == flag)
+    if (length(exact_idx) > 0) {
+      idx <- exact_idx[1]
+      if (idx < length(args) && !startsWith(args[idx + 1], "-")) {
+        return(args[idx + 1])
+      }
+    }
+    prefix <- paste0(flag, "=")
+    value_idx <- grep(paste0("^", gsub("([\\-])", "\\\\\\1", prefix)), args)
+    if (length(value_idx) > 0) {
+      return(sub(paste0("^", gsub("([\\-])", "\\\\\\1", prefix)), "", args[value_idx[1]]))
+    }
   }
-  return(NULL)
+  NULL
 }
 
 BED_DIR <- parse_arg(c("-i", "--input")) %||% BED_DIR

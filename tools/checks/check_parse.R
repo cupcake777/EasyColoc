@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 files_to_check <- c(
-  "run_coloc.r",
+  "run_coloc.R",
   "tools/rerun_plots.R",
   "src/utils_config.R",
   "src/utils_download.R",
@@ -23,18 +23,18 @@ files_to_check <- c(
   "tools/build_output_manifest.R",
   "tools/build_harmony_qc_report.R",
   "tools/summarize_run_status.R",
-  "tests/smoke_test_plotting.R",
-  "tests/smoke_test_bootstrap_refs.R",
-  "tests/smoke_test_bootstrap_demo.R",
-  "tests/smoke_test_gtex_bootstrap.R",
-  "tests/smoke_test_1kg_setup.R",
-  "tests/smoke_test_ld_cache.R",
-  "tests/smoke_test_harmonization_fallback.R",
-  "tests/smoke_test_doctor.R",
-  "tests/smoke_test_refs.R",
-  "tests/smoke_test_runtime_monitor.R",
-  "tests/smoke_test_output_dir_tools.R",
-  "examples/minimal/synthetic_plot_demo.R"
+  "tools/checks/smoke_test_plotting.R",
+  "tools/checks/smoke_test_bootstrap_refs.R",
+  "tools/checks/smoke_test_bootstrap_demo.R",
+  "tools/checks/smoke_test_gtex_bootstrap.R",
+  "tools/checks/smoke_test_1kg_setup.R",
+  "tools/checks/smoke_test_ld_cache.R",
+  "tools/checks/smoke_test_harmonization_fallback.R",
+  "tools/checks/smoke_test_doctor.R",
+  "tools/checks/smoke_test_refs.R",
+  "tools/checks/smoke_test_runtime_monitor.R",
+  "tools/checks/smoke_test_output_dir_tools.R",
+  "examples/synthetic_plot_demo.R"
 )
 
 for (file in files_to_check) {

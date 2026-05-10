@@ -1,0 +1,431 @@
+## 2026-05-09 15:11 CST
+- Task: Audit why the repository's harmony coloc workflow is slow/outdated and identify cleanup or code changes.
+- Actions: Created project workflow log before substantive repository inspection.
+- Commands: date; rg -n "EasyColoc|harmony|coloc" ~/.codex/memories/MEMORY.md; test -f .mem && tail -n 80 .mem || true
+- Files changed: .mem
+- Outputs: none yet
+- Verification: not yet
+- Notes/next: Locate harmony-related code paths, docs, scripts, and benchmark bottlenecks.
+
+## 2026-05-09 15:11 CST
+- Task: Audit harmony workflow slowness and cleanup points.
+- Actions: Located native and legacy harmonization paths; found production wrapper defaults to native unless EASYCOLOC_USE_GWASLAB=true, but configs/docs still reference gwaslab env.
+- Commands: rg harmony/HARMONY/harmon; git diff; sed selected config, run_coloc, utils_format, tools scripts; rg gwaslab references.
+- Files changed: none
+- Outputs: local audit findings only
+- Verification: not yet
+- Notes/next: Update production-facing config/messages/docs to remove stale gwaslab default while preserving explicit validation path.
+
+## 2026-05-09 15:11 CST
+- Task: Clean stale harmony configuration and cache behavior.
+- Actions: Updated production/template/local configs to use legacy_gwaslab_env; updated run initialization label; documented native default and legacy GWASLab validation role; added new harmony tools to parse checks; passed GWAS input_file into harmonization for cache dependency tracking.
+- Commands: Rscript tests/check_parse.R; rg stale gwaslab references; Rscript header audit over harmony/*_harmonized.tsv.
+- Files changed: config/global.yaml, config/local/global.yaml, templates/project/config/global.yaml, run_coloc.r, README.md, docs/TUTORIAL.md, docs/ARCHITECTURE.md, docs/REFERENCE_DATA.md, src/utils_bootstrap.R, tests/check_parse.R, .mem
+- Outputs: Header audit found all 15 existing harmony caches fail canonical schema; missing variant_id in all and N in several.
+- Verification: parse check passed for 35 R files.
+- Notes/next: Decide whether to move/delete old harmony caches before rerunning production coloc.
+
+## 2026-05-09 15:26 CST
+- Task: Remove unnecessary legacy GWASLab harmony path and keep repository lightweight.
+- Actions: Deleted harmony-validate CLI and script; removed legacy_gwaslab_env config; switched run_coloc directly to native run_easycoloc_harmonization; removed GWASLab wrapper/legacy implementation from utils_format.
+- Commands: date; rg legacy harmony references; edited easycoloc, run_coloc.r, config/docs/tests, src/utils_format.R.
+- Files changed: easycoloc, run_coloc.r, config/global.yaml, config/local/global.yaml, templates/project/config/global.yaml, src/utils_bootstrap.R, src/utils_format.R, README.md, docs/ARCHITECTURE.md, docs/REFERENCE_DATA.md, tests/check_parse.R, tools/validate_harmony_against_gwaslab.R, .mem
+- Outputs: none
+- Verification: pending parse checks.
+- Notes/next: Run parse checks and search for stale GWASLab references.
+
+## 2026-05-09 15:26 CST
+- Task: Remove remaining production gwaslab dependency references.
+- Actions: Removed gwaslab from conda/pip environment files; removed unused env_name argument from native harmonizer; updated reference usage labels and tests.
+- Commands: Rscript tests/check_parse.R; rg stale GWASLab/gwaslab references; sed relevant environment/reference/test fragments.
+- Files changed: environment.yml, tools/easycoloc.yml, src/utils_reference.R, src/utils_format.R, tests/smoke_test_doctor.R, tests/smoke_test_refs.R, docs/ARCHITECTURE.md, .mem
+- Outputs: parse check passed before this cleanup; final verification pending.
+- Verification: pending.
+- Notes/next: Run final parse and targeted stale-reference search.
+
+## 2026-05-09 15:31 CST
+- Task: Delete stale harmony cache files.
+- Actions: User confirmed old files have low value and should be deleted.
+- Commands: date
+- Files changed: .mem
+- Outputs: none yet
+- Verification: pending
+- Notes/next: Remove harmony/*_harmonized.tsv and verify no old cache files remain.
+
+## 2026-05-09 15:31 CST
+- Task: Verify stale harmony cache deletion.
+- Actions: Deleted old harmonized TSV caches while keeping harmony directory.
+- Commands: rm -f harmony/*_harmonized.tsv; find harmony -maxdepth 1 -type f -name '*_harmonized.tsv' -print | wc -l; du -sh harmony; git status --short harmony .mem
+- Files changed: harmony cache files deleted; .mem
+- Outputs: remaining *_harmonized.tsv count = 0; harmony directory size = 512 bytes.
+- Verification: confirmed no stale harmonized TSV cache files remain.
+- Notes/next: New native harmonization run will repopulate harmony/.
+
+## 2026-05-09 15:33 CST
+- Task: Full repository scan for cleanup and code mistakes after harmony simplification.
+- Actions: Started repo-wide scan; no relevant memory hits found.
+- Commands: date; rg EasyColoc/harmony/gwaslab/legacy in MEMORY.md; tail -n 80 .mem
+- Files changed: .mem
+- Outputs: none yet
+- Verification: pending
+- Notes/next: Run parse/smoke checks, stale reference scans, and targeted code review.
+
+## 2026-05-09 15:33 CST
+- Task: Fix issues found by full scan.
+- Actions: Removed stale gwaslab Docker dependency and renamed Python venv; moved Bioconductor packages out of Dockerfile install.packages; made TxDb/Annotation gene-track packages lazy optional imports in utils_plot.
+- Commands: Rscript tests/check_parse.R; bash -n shell scripts; rg stale gwaslab references; source core utils; bash tests/smoke_test_cli.sh; sed Dockerfile/utils_plot snippets.
+- Files changed: Dockerfile, src/utils_plot.R, .mem
+- Outputs: R parse and shell syntax checks passed; CLI smoke passed; full source load exposed local TxDb/GenomicFeatures version mismatch before lazy import fix.
+- Verification: pending final parse/source/smoke checks.
+- Notes/next: Re-run checks after fixes.
+
+## 2026-05-10 17:52 CST
+- Task: Review README.md and docs tutorial for user-facing clarity.
+- Actions: Checked current README.md, docs/TUTORIAL.md, available docs, CLI commands, and smoke/check script paths; found README included stale Google-search doc links, duplicated maintainer/reference/Docker sections, and historical edit notes that interrupt normal users.
+- Commands: rg --files README.md docs; rg documentation/tutorial/user-facing command references; sed README.md and docs/TUTORIAL.md excerpts; rg CLI command implementations.
+- Files changed: .mem
+- Outputs: none yet
+- Verification: pending after documentation edits.
+- Notes/next: Rewrite README and tutorial around ordinary user workflows and verify links/commands.
+
+## 2026-05-10 17:52 CST
+- Task: Make README.md and docs/TUTORIAL.md understandable for users.
+- Actions: Rewrote README as a concise user entrypoint; rewrote tutorial as a step-by-step workflow from install/demo to real-data run, monitoring, results, and common problems; removed stale search links, duplicated maintainer/reference/Docker content, and historical edit notes.
+- Commands: Rscript tools/checks/check_parse.R; rg stale documentation/link/legacy terms; rg local documentation paths; git status --short README.md docs/TUTORIAL.md .mem; wc -l README.md docs/TUTORIAL.md.
+- Files changed: README.md, docs/TUTORIAL.md, .mem
+- Outputs: none
+- Verification: R parse check passed for 34 files; stale-link/stale-term scan found no matches; current local doc links point to existing files.
+- Notes/next: none
+
+## 2026-05-09 15:36 CST
+- Task: Fix demo pipeline failure from eager org.Hs.eg.db load.
+- Actions: Removed org.Hs.eg.db from run_coloc.R startup libraries; gene ID mapping functions already use optional namespace calls.
+- Commands: bash tools/run_smoke_checks.sh; rg org.Hs.eg.db/AnnotationDbi references; sed run_coloc/tests snippets.
+- Files changed: run_coloc.r, .mem
+- Outputs: smoke failed at bootstrap demo because local org.Hs.eg.db requires newer AnnotationDbi than installed.
+- Verification: pending rerun.
+- Notes/next: Re-run demo smoke and full smoke checks.
+
+## 2026-05-09 15:41 CST
+- Task: Fix native harmonizer SNP ID fallback regression.
+- Actions: Diagnosed demo coloc skip to prep_coloc_input_file choosing all-NA rsid.gwas as snp after position+allele matching; added helper to fill snp from first non-empty candidate ID with fallback to SNPID/variant_id.
+- Commands: Reproduced demo; inspected runtime/event logs; manually ran query_tabix_region, get_qtl_candidate_phenotypes, and prep_coloc_input_file on demo data.
+- Files changed: src/utils_format.R, .mem
+- Outputs: Manual prep showed 8 matched SNPs collapsed to 1 because snp was NA before fix.
+- Verification: pending rerun.
+- Notes/next: Re-run manual prep, demo smoke, and full smoke checks.
+
+## 2026-05-09 15:45 CST
+- Task: Final repo-wide verification after cleanup fixes.
+- Actions: Re-ran manual prep, parse checks, full smoke suite, stale-reference scans, and harmony cache deletion check.
+- Commands: Rscript tests/check_parse.R; manual prep_coloc_input_file demo reproduction; Rscript tests/smoke_test_bootstrap_demo.R; bash tools/run_smoke_checks.sh; rg stale gwaslab/harmony-validate refs; rg TODO/FIXME; find harmony -name '*_harmonized.tsv' | wc -l; git diff --stat/status.
+- Files changed: .mem
+- Outputs: manual prep retained 8 SNPs; demo smoke passed; all smoke checks passed; stale gwaslab refs only in .mem history; TODO scan only matched docs/superpowers plan text; harmony cache count 0.
+- Verification: R parse, shell syntax, full source load, CLI smoke, demo smoke, and full smoke suite passed.
+- Notes/next: none.
+
+## 2026-05-09 15:51 CST
+- Task: Compare current local changes against remote original and judge validity.
+- Actions: Started remote/baseline audit.
+- Commands: date; git remote -v; git branch --show-current; git status --short
+- Files changed: .mem
+- Outputs: origin is https://github.com/cupcake777/EasyColoc.git; branch main; local tree has harmony/native cleanup changes and new QC tool.
+- Verification: pending diff audit.
+- Notes/next: Fetch origin if needed, compare diffs, and classify changes.
+
+## 2026-05-09 15:51 CST
+- Task: Complete remote-original comparison.
+- Actions: Fetched origin/main through local proxy 127.0.0.1:12345; separated committed local delta from current working-tree delta; ran diff checks.
+
+## 2026-05-09 16:06 CST
+- Task: Continue interrupted repository file inspection.
+- Actions: Resumed from previous audit state; checked current working tree, changed files, targeted frontend diffs, ignored files, tracked file inventory, large-file scan, and stale TODO/GWASLab references.
+- Commands: rg EasyColoc/easycoloc/run_coloc/APA/QTL in MEMORY.md; test -f .mem && sed -n '1,120p' .mem; rg --files; git status --short; git diff --stat/name-status; git diff web/src/components/ResultsTable.tsx web/src/styles.css; sed selected web files; npm test -- --run; npm run build; git status --short --ignored; git ls-files; find . -maxdepth 3 -type f -size +5M; rg stale gwaslab/TODO refs.
+- Files changed: .mem
+- Outputs: Current modified tracked files are only web/src/components/ResultsTable.tsx and web/src/styles.css; ignored local/generated files include config/local configs, examples/minimal/output, tests/manual, web/dist, and web/node_modules; no >5M files found outside .git; no stale gwaslab/TODO/FIXME hits in searched scope.
+- Verification: web Vitest passed 4 tests; web production build passed.
+- Notes/next: The remaining frontend diff is a layout/wrapping fix for long report identifiers; no repository cleanup issue found in this pass.
+- Commands: kill stuck fetch PIDs; env http_proxy/https_proxy/all_proxy ... git fetch origin main; git rev-parse origin/main HEAD; git diff --stat/name-status origin/main; git log origin/main..HEAD; git diff --stat/name-status HEAD; git diff --check origin/main; git diff --check HEAD; git ls-files --others --exclude-standard.
+- Files changed: .mem
+- Outputs: origin/main=9a71b75, HEAD=b445cd3; current uncommitted delta is 18 files, 220 insertions, 481 deletions excluding .mem; untracked files are .mem and tools/build_harmony_qc_report.R; diff checks clean.
+- Verification: all prior parse/source/smoke checks still support the working tree validity.
+- Notes/next: User can commit current cleanup and optionally exclude .mem from repo commit if project-local logs should stay local.
+
+## 2026-05-09 16:21 CST
+- Task: Audit and clean repository structure and README after update.
+- Actions: Started documentation/layout consistency audit.
+- Commands: date; git status --short; find . -maxdepth 3 -type f; sed README.md; sed docs/REPO_LAYOUT.md
+- Files changed: .mem
+- Outputs: Found local runtime/temp/web build artifacts in working tree; README is long and partially repetitive; REPO_LAYOUT claims docs/notes and docs/optimization are local ignored although they are tracked docs.
+- Verification: pending edits and checks.
+- Notes/next: Inspect .gitignore/CLI/docs, then rewrite README and layout notes.
+
+## 2026-05-09 16:21 CST
+- Task: Rewrite README and repository layout documentation.
+- Actions: Replaced repetitive README with concise structure, install, demo, workflow, command, QC, output, and validation sections; rewrote REPO_LAYOUT to separate tracked source/config/docs/tests from ignored local artifacts.
+- Commands: sed .gitignore/easycoloc/config README; git ls-files; git check-ignore.
+- Files changed: README.md, docs/REPO_LAYOUT.md, .mem
+- Outputs: README now has one command table and one validation section; layout doc now matches ignored artifacts and actual CLI surface.
+- Verification: pending parse/smoke and link/path checks.
+- Notes/next: Run checks and inspect diffs.
+
+## 2026-05-09 16:21 CST
+- Task: Verify README/layout cleanup.
+- Actions: Checked CLI help, R parse, shell syntax, README/local path references, diff check, and git status.
+- Commands: ./easycoloc help; Rscript tests/check_parse.R; bash -n easycoloc tools/*.sh subset; rg markdown links; test -e documented paths; git diff --check README.md docs/REPO_LAYOUT.md; git status --short; git diff --stat.
+- Files changed: .mem
+- Outputs: README reduced by 309-line rewrite with net simplification; REPO_LAYOUT rewritten to document tracked vs ignored paths; no missing documented paths.
+- Verification: parse check passed; shell syntax passed; path/link existence checks passed; diff check passed.
+- Notes/next: none.
+
+## 2026-05-09 16:47 CST
+- Task: Full content scan for redundant files/docs and update README example figure.
+- Actions: Started content-level audit; using scientific-visualization guidance for compact publication-style figure refresh.
+- Commands: date; git status --short; sed scientific-visualization skill; find markdown/R/yaml/png files.
+- Files changed: .mem
+- Outputs: Found likely redundant local/development docs and generated/local environment files to review; current README figure is docs/assets/synthetic_locus_demo.png.
+- Verification: pending.
+- Notes/next: Scan duplicate doc content, identify tracked vs ignored clutter, regenerate compact figure.
+
+## 2026-05-09 16:52 CST
+- Task: Remove redundant layout/docs and refresh README example figure.
+- Actions: Deleted redundant docs/REPO_LAYOUT.md and ignored legacy notes/optimization markdown; updated README to rely on the concise inline structure plus existing architecture/config/test docs; rewrote minimal demo figure script for a compact publication-style locus panel.
+- Commands: rg duplicate layout/stale refs; git ls-files ignored docs; sed README/REPO_LAYOUT/ARCHITECTURE/demo snippets; apply_patch.
+- Files changed: README.md, docs/REPO_LAYOUT.md, docs/notes/Fix_process.md, docs/notes/recommend.md, docs/optimization/OPTIMIZATION_COMPLETE.md, docs/optimization/OPTIMIZATION_SUMMARY.md, examples/minimal/synthetic_plot_demo.R, .mem
+- Outputs: pending regenerated docs/assets/synthetic_locus_demo.png.
+- Verification: pending Rscript demo, parse checks, image inspection, and git diff checks.
+- Notes/next: Generate compact PNG asset, then verify references and tests.
+
+## 2026-05-09 16:58 CST
+- Task: Complete redundancy audit before commit.
+- Actions: Generated compact README/demo PNG, visually inspected it, removed the tracked docs/superpowers design spec because docs/superpowers is ignored and the spec is development residue rather than user documentation.
+- Commands: Rscript examples/minimal/synthetic_plot_demo.R; cp demo PNG to docs/assets; view_image; Rscript tests/check_parse.R; rg stale layout/gwaslab refs; file PNGs; git diff/status.
+- Files changed: docs/assets/synthetic_locus_demo.png, docs/superpowers/specs/2026-03-31-report-web-design.md, .mem
+- Outputs: README image is now 975x585 PNG and about 56K.
+- Verification: R parse passed for 34 files; demo script runs without warnings; diff check clean so far; only stale TODO hit was in an ignored docs/superpowers plan file.
+- Notes/next: Re-run final link/status checks, commit tracked cleanup, and push.
+
+## 2026-05-09 17:03 CST
+- Task: Commit and push repository cleanup.
+- Actions: Staged tracked doc/figure/script cleanup, committed, and pushed main to origin through local proxy 127.0.0.1:12345.
+- Commands: git add -u README.md docs examples/minimal/synthetic_plot_demo.R; git commit -m "Trim redundant docs and refresh demo figure"; env http_proxy/https_proxy/all_proxy ... git push origin main; git status; git log -3; git rev-parse HEAD origin/main.
+- Files changed: .mem only after commit; .mem remains untracked intentionally.
+- Outputs: commit e768f97 pushed; origin/main equals HEAD.
+- Verification: push succeeded; final status only shows untracked .mem.
+- Notes/next: none.
+
+## 2026-05-09 17:07 CST
+- Task: Restore original scientific figure style while keeping smaller README display.
+- Actions: User rejected the compact schematic-style figure as weakening scientific presentation; restored the previous figure asset and minimal demo script from commit 782d5a8, leaving README image width reduced.
+- Commands: git restore --source=782d5a8 -- docs/assets/synthetic_locus_demo.png examples/minimal/synthetic_plot_demo.R; file PNG; Rscript tests/check_parse.R; git diff --check; git add; git commit -m "Restore original demo figure style"; env proxy git push origin main.
+- Files changed: docs/assets/synthetic_locus_demo.png, examples/minimal/synthetic_plot_demo.R, .mem
+- Outputs: commit 742973d pushed; origin/main equals HEAD.
+- Verification: R parse passed for 34 files; push succeeded; final status only shows untracked .mem.
+- Notes/next: For future README figure tweaks, preserve the original scientific locus/report style and only adjust display size unless explicitly asked to redesign.
+
+## 2026-05-09 17:21 CST
+- Task: Full repository structure audit after user flagged remaining duplication and Chinese YAML.
+- Actions: Scanned tracked files, visible local files, directory tree, Chinese text, YAML/YML references, template/example/data/logs overlap.
+- Commands: find tracked/local files; git ls-files; rg Han/TODO/template/example/yaml/yml; sed easycoloc/config/batch/template/bootstrap/test snippets.
+- Files changed: .mem
+- Outputs: Found tracked empty-shell data/logs README dirs, nested templates/project scaffold, Chinese config/gwas_batch.yaml and tools/batch_run.sh comments, mixed .yaml/.yml naming, and large ignored local output clutter.
+- Verification: pending cleanup and tests.
+- Notes/next: Remove low-value tracked shells/templates, standardize configs to .yml, update code/docs/tests, and clean ignored local outputs.
+
+## 2026-05-09 17:38 CST
+- Task: Normalize harmonized GWAS cache output schema.
+- Actions: Inspected current large harmony outputs and located harmonization/cache write path.
+- Commands: ls harmony output dir; head/sed first rows of *_harmonized.tsv; rg harmonization/cache symbols; sed run_coloc.R/utils_format/QC snippets.
+- Files changed: .mem
+- Outputs: Existing caches have inconsistent columns: hg38 native output lacks LIFTOVER_MAPPED while liftover outputs include it; all include process metadata fields not needed for downstream direct use.
+- Verification: pending code edits and smoke checks.
+- Notes/next: Add clean cache schema for written harmony files while preserving in-memory harmonization state.
+
+## 2026-05-09 17:49 CST
+- Task: Implement clean harmonized GWAS cache schema.
+- Actions: Added a dedicated harmony output schema; removed rsID duplication and process metadata from returned/written caches; updated harmony QC and README to use SNPID as the rsid field and qtl.yml as the target-build source.
+- Commands: apply_patch src/utils_format.R tests/smoke_test_harmonization_fallback.R tools/build_harmony_qc_report.R README.md; Rscript tests/smoke_test_harmonization_fallback.R; Rscript tests/check_parse.R; Rscript -e minimal cache write check; git diff --check.
+- Files changed: src/utils_format.R, tests/smoke_test_harmonization_fallback.R, tools/build_harmony_qc_report.R, README.md, .mem
+- Outputs: New on-disk header is SNPID, variant_id, CHR, POS, EA, NEA, EAF, BETA, SE, P, N.
+- Verification: harmonization smoke passed; R parse check passed for 34 files; minimal cache write produced exact 11-column schema with no rsID/process columns; diff whitespace check passed.
+- Notes/next: Existing large harmony files must be regenerated or rewritten before they reflect the new schema.
+
+## 2026-05-09 17:55 CST
+- Task: Run one real-data end-to-end EasyColoc test after harmony schema cleanup.
+- Actions: Located APA QTL inputs/config and existing GWAS harmony outputs; planning isolated small-locus run to avoid overwriting shared harmony caches.
+- Commands: date; tail .mem; find/rg APA 04_coloc config/input/results; sed current EasyColoc configs.
+- Files changed: .mem
+- Outputs: Found APA QTL config and tabix inputs under /gpfs/hpc/home/chenchao/liyc/project/work/apa/04_coloc; selected isolated run strategy using a small EUR_AD locus subset.
+- Verification: pending full test run.
+- Notes/next: Build local e2e configs/data, run pipeline, inspect outputs and harmony header.
+
+## 2026-05-09 18:10 CST
+- Task: Complete real-data end-to-end EasyColoc test.
+- Actions: Built isolated test project under temp/e2e_realdata_harmony_schema using EUR_AD rs11039130 hg19 window and APA prenatal QTL tabix input; ran doctor and full pipeline; inspected outputs.
+- Commands: Rscript -e build test configs/data; ./easycoloc doctor; ./easycoloc run; tail run log; head/awk/wc harmony output; list result files; inspect ABF/all results; ./easycoloc check.
+- Files changed: temp/e2e_realdata_harmony_schema/*, .mem
+- Outputs: Harmony cache temp/e2e_realdata_harmony_schema/harmony/EUR_AD_TEST_b19to38_harmonized.tsv has 11-column clean schema and 1649 rows plus header; results include 2 ABF CSVs, 2 RDS, 2 PDFs, merged summaries, significant result tables, and HTML report.
+- Verification: Doctor passed with only nonblocking hash/recomb-map warnings; full run completed; harmonization mapped 1649/1649 hg19 variants to hg38; PLINK clumped 124 matched top variants into 2 clumps; all_colocalization_results.csv has 4 rows; 2 rows pass PP4 >= 0.7. ./easycoloc check reported heartbeat_stage pipeline_complete and no runtime failures, but status NOT_STARTED because the run log was redirected outside results.
+- Notes/next: Consider improving check/status log discovery for externally redirected logs.
+
+## 2026-05-09 18:30 CST
+- Task: Fix completion check and prepare repository cleanup commit.
+- Actions: Updated check_run_completion to accept runtime heartbeat/event completion when no managed log is present; added smoke coverage; fixed reference requirement listing for map/list paths; removed isolated e2e test directory.
+- Commands: apply_patch tools/check_run_completion.R tests/smoke_test_output_dir_tools.R src/utils_reference.R; rm -rf temp/e2e_realdata_harmony_schema; Rscript tests/check_parse.R; Rscript tests/smoke_test_output_dir_tools.R; bash tests/smoke_test_cli.sh; npm --prefix web run build; bash tests/smoke_test_report_web_cli.sh; ./easycoloc smoke; git diff --check/status/stat.
+- Files changed: tools/check_run_completion.R, tests/smoke_test_output_dir_tools.R, src/utils_reference.R, .mem
+- Outputs: check now reports COMPLETE from pipeline_complete heartbeat plus summary/report events even when latest_log is NA; refs command handles named plink_keep/recom maps.
+- Verification: Full ./easycoloc smoke passed; git diff --check passed; ignored generated web/dist and examples/minimal/output are not staged.
+- Notes/next: Stage tracked repository cleanup and commit; .mem remains untracked.
+
+## 2026-05-09 18:37 CST
+- Task: Fix README badge organization after review feedback.
+- Actions: Replaced unstructured badge block with conventional sections: Version & Registry, Environment, CI/CD & Quality, License; did not add DOI.
+- Commands: sed README; rg badge terms; apply_patch README.md; git diff --check README.md; brain-sync-hpc propose-file badge convention memory.
+- Files changed: README.md, .mem
+- Outputs: README top badge section now follows standard grouping.
+- Verification: README diff check passed.
+- Notes/next: Commit README badge fix.
+
+## 2026-05-09 18:41 CST
+- Task: Put README badges inline within each section.
+- Actions: Collapsed badges in each category onto one line and recorded concise-reply preference.
+- Commands: apply_patch README.md; git diff --check README.md; brain-sync-hpc propose-file concise/inline badge memory.
+- Files changed: README.md, .mem
+- Outputs: Badge categories remain, badges within each category are inline.
+- Verification: README diff check passed.
+- Notes/next: Commit README inline badge fix.
+
+## 2026-05-09 21:31 CST
+- Task: Optimize report web visualization layout for long labels.
+- Actions: Located React/CSS report UI and fixed long-label overlap risk in top-hit cards, detail grid, asset list, and all-nowrap results table.
+- Commands: rg report/web/label symbols; sed web/src/App.tsx web/src/components/* web/src/styles.css; apply_patch web/src/components/ResultsTable.tsx web/src/styles.css .mem; npm --prefix web run build; git diff --check.
+- Files changed: web/src/components/ResultsTable.tsx, web/src/styles.css, .mem
+- Outputs: Report visualization retained; long text now wraps in detail/assets/table cells, top-hit cards ellipsize one-line labels, result table uses fixed column widths with numeric columns kept compact.
+- Verification: web production build passed; git diff --check passed.
+- Notes/next: none.
+
+## 2026-05-09 22:23 CST
+- Task: Review repository files/scripts one by one for upload/staging and needed modifications.
+- Actions: Started repository inventory from git status, tracked/untracked file lists, ignore rules, and script/config scans.
+- Commands: pending.
+- Files changed: .mem
+- Outputs: pending.
+- Verification: pending.
+- Notes/next: Classify files into commit/upload, ignore/local-only, and needs-edit groups.
+
+## 2026-05-09 23:49 CST
+- Task: Review Markdown documentation for incorrect, redundant, or logically inconsistent statements.
+- Actions: Started one-by-one Markdown audit across README, docs, config, tests, and examples.
+- Commands: find . -name '*.md'; tail .mem
+- Files changed: .mem
+- Outputs: Found 12 Markdown files to inspect.
+- Verification: pending.
+- Notes/next: Read key sections, patch clear wording or logic issues, then run markdown/diff checks.
+
+## 2026-05-10 00:00 CST
+- Task: Trim user-facing Markdown and fix outdated Docker docs.
+- Actions: Accepted user preference that EasyColoc user docs should be operation-focused, not architecture-heavy; removed README repository-structure exposition; condensed architecture/test fixture docs into maintainer notes; rewrote Docker docs around current easycoloc CLI; fixed Dockerfile stale tools/batch_run.sh reference and entrypoint.
+- Commands: rg architecture/repository/docker/test wording; sed README/docs/Dockerfile/tests docs; apply_patch README.md docs/TUTORIAL.md docs/ARCHITECTURE.md docs/DOCKER.md tests/README.md tests/fixtures/README.md Dockerfile; git diff --check; bash -n selected shell scripts; Rscript tests/check_parse.R; brain-sync-hpc propose-file.
+- Files changed: README.md, docs/TUTORIAL.md, docs/ARCHITECTURE.md, docs/DOCKER.md, tests/README.md, tests/fixtures/README.md, Dockerfile, .mem
+- Outputs: User-facing docs now focus on install/run/inspect/troubleshoot; maintainer details remain but are not promoted as required user reading; stale Docker batch_run references removed.
+- Verification: git diff --check passed; bash syntax check passed; R parse check passed for 34 files; stale wording search found no batch_run/Repository Structure/architecture/audit/handoff hits in Markdown docs.
+- Notes/next: Consider whether to run Docker build separately before committing Dockerfile behavior change.
+
+## 2026-05-10 00:14 CST
+- Task: Continue Markdown redundancy and logic audit.
+- Actions: Rewrote reference/config/example Markdown into concise operation checklists; fixed reference logic so PLINK LD panel is build-dependent rather than saying plink_hg38 is always required; corrected Docker docs after Dockerfile ENTRYPOINT change so examples pass subcommands directly.
+- Commands: sed docs/REFERENCE_DATA.md docs/REFERENCE_COMPATIBILITY.md config/README.md config/local/README.md examples/minimal/README.md CONTRIBUTING.md; rg reference/config keys; sed config/*.yml; apply_patch reference/config/example/Docker docs and Dockerfile; rg stale/redundant phrases; git diff --check; bash -n selected shell scripts; Rscript tests/check_parse.R; git diff --stat.
+- Files changed: docs/REFERENCE_DATA.md, docs/REFERENCE_COMPATIBILITY.md, config/README.md, config/local/README.md, examples/minimal/README.md, docs/DOCKER.md, Dockerfile, .mem
+- Outputs: Removed explanatory sections such as Why This Matters/Why This Exists and reduced docs to commands, required inputs, compatibility rules, and expected outputs.
+- Verification: git diff --check passed; bash syntax check passed; R parse check passed for 34 files; stale phrase scan now only returns expected user CLI command examples.
+- Notes/next: Docker image build remains untested.
+
+## 2026-05-10 00:27 CST
+- Task: Normalize R script suffixes and fix related nonstandard script details.
+- Actions: Started audit after user requested `.R` suffix convention; found lowercase run_coloc.r, tools/bed2rds.r, and tools/hash2rds.r plus references.
+- Commands: find lowercase .r files; rg run_coloc.r/bed2rds.r/hash2rds.r references.
+- Files changed: .mem
+- Outputs: pending rename and reference updates.
+- Verification: pending.
+- Notes/next: Rename files to .R, update all references, rerun parse and smoke-level checks.
+
+## 2026-05-10 00:31 CST
+- Task: Complete `.R` suffix normalization.
+- Actions: Renamed run_coloc.r to run_coloc.R, tools/bed2rds.r to tools/bed2rds.R, and tools/hash2rds.r to tools/hash2rds.R; updated CLI, managed runner, runtime fingerprint, bootstrap, tests, docs, local run script, and plot hints; added bed2rds/hash2rds to parse check; removed personal absolute default path from bed2rds and made its arg parser handle --flag VALUE and --flag=VALUE.
+- Commands: mv lowercase R scripts; perl reference replacement; apply_patch tools/run_pipeline_managed.sh tests/check_parse.R tools/bed2rds.R easycoloc Dockerfile .mem; find lowercase .r; rg stale lowercase references; Rscript tests/check_parse.R; bash -n selected shell scripts; ./easycoloc doctor --help; bash tests/smoke_test_cli.sh; Rscript tools/bed2rds.R --help; git diff --check.
+- Files changed: run_coloc.R, tools/bed2rds.R, tools/hash2rds.R, easycoloc, tools/run_pipeline_managed.sh, src/utils_bootstrap.R, src/utils_runtime.R, tests/check_parse.R, tests/smoke_test_runtime_monitor.R, tools/plot_summary.R, config/local/run_apa_04_coloc.sh, docs/ARCHITECTURE.md, Dockerfile, .mem
+- Outputs: No lowercase .r files remain outside ignored directories; no stale run_coloc.r/bed2rds.r/hash2rds.r references remain.
+- Verification: R parse check passed for 36 files; shell syntax check passed; CLI smoke passed; doctor help and bed2rds help worked; git diff --check passed.
+- Notes/next: Git status currently shows delete/add pairs for renamed files because changes are unstaged; staging should detect renames.
+
+## 2026-05-10 15:36 CST
+- Task: Assess whether ../apa/04_coloc workflow is runnable before Markdown/push review.
+- Actions: Started status and wrapper/log inspection.
+- Commands: date; rg memory index; git status --short; rg --files ../apa/04_coloc; rg --files repo.
+- Files changed: .mem
+- Outputs: pending.
+- Verification: pending.
+- Notes/next: Inspect APA wrappers/configs and recent logs for blockers.
+
+## 2026-05-10 15:40 CST
+- Task: Assess whether ../apa/04_coloc workflow is runnable before Markdown/push review.
+- Actions: Inspected APA wrappers, previous Slurm logs, runtime state, CLI references, and lightweight syntax/help checks.
+- Commands: bash -n ../apa/04_coloc/run_coloc_{hpc,local}.sh; ./easycoloc --help; rg run_coloc suffix refs; tail previous logs; awk task_state status counts; find result counts; squeue user jobs.
+- Files changed: .mem
+- Outputs: Previous run produced 214 locus CSVs, 32 RDS, 32 PDFs; runtime state has 859 completed and 731 failed task rows; last Slurm job 42402403 was cancelled rather than ending with a wrapper startup failure; no active apa_coloc job in squeue.
+- Verification: APA wrappers pass bash syntax; current CLI help works; repository references use run_coloc.R, not run_coloc.r.
+- Notes/next: Workflow entry is runnable enough to submit/resume before Markdown push review, but existing failed rows indicate data/content issues to triage separately.
+
+## 2026-05-10 15:49 CST
+- Task: Check whether hash table flow is used in final EasyColoc/APA workflow.
+- Actions: Located hash table initialization, merge Strategy 2, configs, logs, and local hash table artifacts.
+- Commands: rg hash/hash_table references; sed selected run_coloc.R/src/utils_format.R/src/utils_hash.R/config/global.yml regions; rg APA configs/logs for hash markers; find hash_table RDS/JSON artifacts.
+- Files changed: .mem
+- Outputs: Current repo and ../apa/04_coloc configs set hash_table_dir to empty; no local hash_table RDS/JSON artifacts found in searched project paths; no APA log markers for [HASH], Strategy 2, or hash_conversion.
+- Verification: Code path exists but requires configured existing hash_table_dir and RDS files, and only runs as fallback when direct rsID overlap is insufficient.
+- Notes/next: Final APA run did not use hash table rescue under current observed configuration.
+
+## 2026-05-10 16:14 CST
+- Task: Diagnose current local run failure in ../apa/04_coloc.
+- Actions: Inspected newest coloc_42404988.err/out, APA run wrapper, and current EasyColoc harmonization code.
+- Commands: pwd/date/tail .mem; rg memory index for EasyColoc/04_coloc context; find recent logs; ls -lt ../apa/04_coloc; rg error patterns; sed run_coloc.sh/src/utils_format.R snippets; rg harmonize/GWASLab references.
+- Files changed: .mem
+- Outputs: ../apa/04_coloc/coloc_42404988.err contains only "[PATCH] Expected GWASLab template line not found in .../src/utils_format.R"; stdout is empty.
+- Verification: Confirmed run_coloc.sh calls patch_easycoloc_gwaslab_refinfer before resolving/running EasyColoc, and current src/utils_format.R uses EasyColoc native harmonization rather than the old GWASLab mysumstats.harmonize template.
+- Notes/next: Remove or neutralize the obsolete patch_easycoloc_gwaslab_refinfer call/function in ../apa/04_coloc/run_coloc.sh before rerunning; then inspect any downstream runtime failures separately.
+
+## 2026-05-10 16:17 CST
+- Task: Fix obsolete GWASLab patch startup blocker in ../apa/04_coloc.
+- Actions: Updated patch_easycoloc_gwaslab_refinfer to detect current EasyColoc native harmonization and skip the legacy GWASLab patch instead of failing.
+- Commands: sed selected run_coloc.sh snippets; apply_patch ../apa/04_coloc/run_coloc.sh .mem; bash -n ../apa/04_coloc/run_coloc.sh; grep-based native harmonization branch check.
+- Files changed: ../apa/04_coloc/run_coloc.sh, .mem
+- Outputs: run_coloc.sh now prints "[PATCH] EasyColoc native harmonization detected; skipping legacy GWASLab patch." when current native harmonization code is present.
+- Verification: bash -n passed; lightweight branch check returned "skip legacy patch".
+- Notes/next: Rerun ../apa/04_coloc/run_coloc.sh or submit via sbatch to expose any downstream runtime/data issues.
+
+## 2026-05-10 17:23 CST
+- Task: Explain tests directory organization.
+- Actions: Inspected tests/README.md, tests/fixtures/README.md, and test file list/source patterns.
+- Commands: rg memory index for EasyColoc/tests; date/tail .mem; rg --files tests; sed selected README files; rg test script source/patterns.
+- Files changed: .mem
+- Outputs: No generated outputs; produced user-facing explanation of smoke-test organization.
+- Verification: Read-only inspection only; no tests run.
+- Notes/next: none
+
+## 2026-05-10 17:30 CST
+- Task: Remove local temporary tests directory from public repo structure.
+- Actions: User clarified tests/ is local temporary material and should be deleted rather than migrated. Inspected tracked/status impact, then removed the directory.
+- Commands: git status --short tests .mem; git ls-files tests; rm -rf tests; git status --short tests .mem; test -d tests.
+- Files changed: Deleted tracked tests/ files; updated .mem.
+- Outputs: tests/ directory removed from working tree.
+- Verification: git status lists tracked tests files as deleted; test -d tests returned nonzero, confirming directory absence.
+- Notes/next: none
+
+## 2026-05-10 17:35 CST
+- Task: Recover reusable tests content into tools/examples before keeping tests/ deleted.
+- Actions: User challenged direct deletion; restored tests content from HEAD, migrated maintainer checks to tools/checks, user-facing checks to examples/checks, fixtures to examples/fixtures, then removed the old tests directory.
+- Commands: git restore --source=HEAD -- tests; mv selected tests files into tools/checks, examples/checks, examples/fixtures; rmdir tests; rg old tests/examples paths; Rscript tools/checks/check_parse.R; bash -n examples/checks/check_cli.sh examples/checks/check_report_web_cli.sh tools/run_smoke_checks.sh tools/run_extended_checks.sh.
+- Files changed: Deleted tests/ paths; added tools/checks/, examples/checks/, examples/fixtures/; updated README.md, docs/ARCHITECTURE.md, easycoloc, tools/run_smoke_checks.sh, tools/run_extended_checks.sh, examples/synthetic_plot_demo.R, examples/README.md.
+- Outputs: tests/ removed while reusable scripts/fixtures are retained under semantic public locations.
+- Verification: No stale tests/ or examples/minimal references found; parse check passed for 34 files; shell syntax checks passed; test -d tests returned nonzero.
+- Notes/next: none

@@ -159,7 +159,7 @@ initialize_runtime_tracker <- function(output_dir,
 register_active_run <- function(log_file = NA_character_,
                                 run_label = NA_character_,
                                 parent_pid = NA_integer_,
-                                command = "Rscript run_coloc.r") {
+                                command = "Rscript run_coloc.R") {
   if (!runtime_is_enabled()) {
     return(invisible(FALSE))
   }
