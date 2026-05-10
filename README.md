@@ -150,7 +150,6 @@ Do not mix `hg19` and `hg38` coordinates unless the input has been lifted over a
 ## More Documentation
 
 - [Tutorial](docs/TUTORIAL.md)
-- [Architecture notes](docs/ARCHITECTURE.md)
 
 ## Maintainer Checks
 

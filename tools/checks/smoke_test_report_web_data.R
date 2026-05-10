@@ -11,7 +11,7 @@ assert_true <- function(cond, msg) {
 
 script_arg <- commandArgs(trailingOnly = FALSE)
 this_file <- sub("^--file=", "", script_arg[grepl("^--file=", script_arg)][1])
-repo_root <- normalizePath(file.path(dirname(this_file), ".."), mustWork = TRUE)
+repo_root <- normalizePath(file.path(dirname(this_file), "..", ".."), mustWork = TRUE)
 build_script <- file.path(repo_root, "tools", "build_report_web_data.R")
 
 tmp_dir <- tempfile(pattern = "easycoloc_report_web_")

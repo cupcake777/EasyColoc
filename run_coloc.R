@@ -413,9 +413,15 @@ run_pipeline <- function() {
   } else {
     FALSE
   }
+  precompute_locus_ld <- if (!is.null(cfg_global$runtime$precompute_locus_ld)) {
+    isTRUE(cfg_global$runtime$precompute_locus_ld)
+  } else {
+    FALSE
+  }
   total_gwas <- length(cfg_gwas$datasets)
   message(glue("[INIT] Using {n_cores} CPU cores"))
   message(glue("[INIT] Per-locus QTL parallelism: {if (parallel_qtl_tasks) 'enabled' else 'disabled'}"))
+  message(glue("[INIT] Per-locus LD precompute: {if (precompute_locus_ld) 'enabled' else 'disabled'}"))
   write_runtime_heartbeat(
     stage = "pipeline_start",
     message_text = "Main GWAS loop started",
@@ -637,7 +643,7 @@ run_pipeline <- function() {
                 gwas_locus[, rsid := get(rsid_col_gwas)]
               }
               locus_ld_res <- NULL
-              if ("rsid" %in% names(gwas_locus)) {
+              if (isTRUE(precompute_locus_ld) && "rsid" %in% names(gwas_locus)) {
                 locus_rsids <- unique(as.character(gwas_locus$rsid))
                 locus_rsids <- locus_rsids[!is.na(locus_rsids) & grepl("^rs", locus_rsids)]
                 if (length(locus_rsids) >= min_snps_susie) {

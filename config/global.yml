@@ -56,6 +56,7 @@ runtime:
   skip_existing_locus_results: false
   write_task_events: true
   parallel_qtl_tasks: false
+  precompute_locus_ld: false
 
 harmonization_settings:
   liftover_chain: "refs/liftover/hg19ToHg38.over.chain.gz"

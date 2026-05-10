@@ -403,7 +403,9 @@ easycoloc_write_demo_configs <- function(project_dir) {
       enabled = TRUE,
       resume_completed_tasks = TRUE,
       skip_existing_locus_results = FALSE,
-      write_task_events = TRUE
+      write_task_events = TRUE,
+      parallel_qtl_tasks = FALSE,
+      precompute_locus_ld = FALSE
     ),
     harmonization_settings = list(
       liftover_chain = ""
