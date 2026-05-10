@@ -36,6 +36,7 @@ script_path <- tryCatch({
 }, error = function(e) ".")
 project_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = FALSE)
 utils_plot_path <- file.path(project_root, "src", "utils_plot.R")
+utils_helpers_path <- file.path(project_root, "src", "utils_helpers.R")
 if (file.exists(utils_plot_path)) {
     source(utils_plot_path, local = TRUE)
     message("[INIT] Loaded ld_extract() from ", utils_plot_path)
@@ -43,6 +44,12 @@ if (file.exists(utils_plot_path)) {
     message("[WARN] Could not find src/utils_plot.R at ", utils_plot_path)
     message("[WARN] LD computation unavailable — run from project root or set correct path")
     ld_extract <- NULL
+}
+if (file.exists(utils_helpers_path)) {
+    source(utils_helpers_path, local = TRUE)
+    message("[INIT] Loaded helpers from ", utils_helpers_path)
+} else {
+    stop("Could not find src/utils_helpers.R at ", utils_helpers_path, call. = FALSE)
 }
 
 # ==============================================================================
@@ -286,13 +293,6 @@ filter_results <- function(dt, opts) {
 # ==============================================================================
 # Filename Mapping: Results Row → RDS Path
 # ==============================================================================
-
-sanitize_filename <- function(filename) {
-    sanitized <- gsub("[^[:alnum:]_.-]", "_", filename)
-    sanitized <- gsub("_+", "_", sanitized)
-    sanitized <- gsub("^_|_$", "", sanitized)
-    return(sanitized)
-}
 
 find_plot_rds <- function(row, rds_dir) {
     # Reconstruct filename as pipeline does: {GWAS_ID}_{QTL_ID}_{Gene}_coloc.rds

@@ -25,6 +25,14 @@ Run the repository smoke tests when you want a fuller check:
 ./easycoloc smoke
 ```
 
+Run the small example check if you want a faster check of the CLI, report web server, and plot code:
+
+```bash
+bash examples/check_example.sh
+```
+
+It writes one plot to `examples/output/synthetic_locus_demo.pdf`. The input files in `examples/` are only for testing, not for real analysis.
+
 ## 2. Run The Demo First
 
 The demo is the fastest way to see what a successful run looks like:
