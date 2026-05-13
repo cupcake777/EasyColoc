@@ -405,10 +405,14 @@ easycoloc_write_demo_configs <- function(project_dir) {
       skip_existing_locus_results = FALSE,
       write_task_events = TRUE,
       parallel_qtl_tasks = FALSE,
-      precompute_locus_ld = FALSE
+      precompute_locus_ld = FALSE,
+      ld_plink_timeout = 120
     ),
     harmonization_settings = list(
-      liftover_chain = ""
+      liftover_chain = "",
+      chunked = TRUE,
+      chunk_min_rows = 1000000,
+      chunk_parallel_jobs = 1
     ),
     plot_settings = list(
       significance_threshold = 1e-5,

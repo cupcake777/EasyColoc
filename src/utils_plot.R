@@ -97,6 +97,45 @@ format_qtl_label <- function(qtl_type) {
 
 .ld_reference_cache <- new.env(parent = emptyenv())
 
+get_ld_plink_timeout <- function(default = 120L) {
+  timeout <- getOption("easycoloc.ld_plink_timeout", default)
+  if (is.null(timeout) || length(timeout) == 0 || is.na(timeout)) {
+    return(default)
+  }
+  timeout <- as.integer(timeout[1])
+  if (!is.finite(timeout) || timeout <= 0L) {
+    return(default)
+  }
+  timeout
+}
+
+run_ld_plink <- function(plink_bin, args, timeout = get_ld_plink_timeout(), label = "LD") {
+  cmd_text <- paste(c(shQuote(plink_bin), shQuote(args)), collapse = " ")
+  message(glue("[LD] Running PLINK {label} with timeout {timeout}s: {cmd_text}"))
+  status <- tryCatch(
+    system2(
+      plink_bin,
+      args = args,
+      stdout = FALSE,
+      stderr = FALSE,
+      timeout = timeout
+    ),
+    warning = function(w) {
+      message(glue("[LD] PLINK {label} warning: {conditionMessage(w)}"))
+      124L
+    },
+    error = function(e) {
+      message(glue("[LD] PLINK {label} failed to start/run: {conditionMessage(e)}"))
+      1L
+    }
+  )
+  status <- as.integer(status)
+  if (!identical(status, 0L)) {
+    message(glue("[LD] PLINK {label} exited non-zero or timed out (status={status})"))
+  }
+  status
+}
+
 load_ld_reference_mapping <- function(bfile, variants = NULL) {
   mapping_file <- paste0(bfile, "_to_rsid.tsv")
   variants <- unique(as.character(variants))
@@ -212,6 +251,23 @@ map_ld_result_to_input_ids <- function(ld_result, unique_to_rsid) {
   ]
 
   as.data.frame(ld_dt, stringsAsFactors = FALSE)
+}
+
+ld_matrix_to_pairs <- function(ld_res) {
+  if (is.null(ld_res) || is.null(ld_res$R)) {
+    return(NULL)
+  }
+  ld_mat <- as.matrix(ld_res$R)
+  if (nrow(ld_mat) == 0 || ncol(ld_mat) == 0) {
+    return(NULL)
+  }
+  ld_result <- as.data.frame(as.table(ld_mat), stringsAsFactors = FALSE)
+  colnames(ld_result) <- c("SNP_A", "SNP_B", "R")
+  ld_result <- ld_result[ld_result$SNP_A != ld_result$SNP_B, ]
+  if (nrow(ld_result) == 0) {
+    return(NULL)
+  }
+  ld_result
 }
 
 parse_feature_region <- function(label) {
@@ -523,18 +579,18 @@ ld_extract <- function(variants, bfile, plink_bin) {
         return(NULL)
       }
 
-      shell <- ifelse(Sys.info()["sysname"] == "Darwin", "cmd", "sh")
-      cmd <- paste(
-        shQuote(plink_bin, type = shell),
-        "--bfile", shQuote(bfile, type = shell),
-        "--extract", shQuote(fn, type = shell),
+      plink_args <- c(
+        "--bfile", bfile,
+        "--extract", fn,
         "--allow-extra-chr",
-        "--r square",
+        "--r", "square",
         "--make-just-bim",
-        "--out", shQuote(fn, type = shell)
+        "--out", fn
       )
-
-      sys_out <- system(cmd, intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+      sys_out <- run_ld_plink(plink_bin, plink_args, label = glue("plot LD ({length(query_ids)} variants)"))
+      if (!identical(sys_out, 0L)) {
+        return(NULL)
+      }
 
       ld_file <- paste0(fn, ".ld")
       bim_file <- paste0(fn, ".bim")
@@ -655,13 +711,29 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
   message(glue("[LD_plot] Sample SNPs in data: {paste(sample_snps, collapse=', ')}"))
 
   plot_df$r2 <- NA_real_
-  if (!is.null(bfile) && file.exists(paste0(bfile, ".bed"))) {
+  if (!is.null(ld_df)) {
+    if (is.list(ld_df) && !is.null(ld_df$R)) {
+      ld_result <- ld_matrix_to_pairs(ld_df)
+    } else {
+      ld_result <- as.data.frame(ld_df, stringsAsFactors = FALSE)
+    }
+    if (!is.null(ld_result) && all(c("SNP_A", "SNP_B", "R") %in% names(ld_result))) {
+      message(glue("[LD_plot] Using supplied LD table/matrix with {nrow(ld_result)} pairs"))
+    } else {
+      message("[LD_plot] Supplied ld_df is not a usable LD table/matrix")
+      ld_result <- NULL
+    }
+  } else if (!is.null(bfile) && file.exists(paste0(bfile, ".bed"))) {
     snps_for_ld <- unique(c(lead_snp, plot_df$rsid))
     message(glue("[LD] Extracting LD for {length(snps_for_ld)} SNPs including lead SNP..."))
 
     ld_result <- ld_extract(snps_for_ld, bfile, plink_bin)
+  } else {
+    message(glue("[LD_plot] PLINK bfile not found: {bfile}"))
+    ld_result <- NULL
+  }
 
-    if (!is.null(ld_result)) {
+  if (!is.null(ld_result)) {
       lead_in_ld <- any(ld_result$SNP_A == lead_snp | ld_result$SNP_B == lead_snp)
       message(glue("[LD] Lead SNP in LD results: {lead_in_ld}"))
 
@@ -713,11 +785,8 @@ LD_plot <- function(df, ld_df = NULL, lead_snps = NULL,
         plot_df$r2 <- ifelse(!is.na(plot_df$r2_calc), plot_df$r2_calc, plot_df$r2)
         plot_df$r2_calc <- NULL
       }
-    } else {
-      message("[LD_plot] LD extraction returned NULL - check PLINK bfile and SNP IDs")
-    }
   } else {
-    message(glue("[LD_plot] PLINK bfile not found: {bfile}"))
+    message("[LD_plot] LD extraction returned NULL - check PLINK bfile and SNP IDs")
   }
   plot_df$r2[plot_df$rsid == lead_snp] <- 1.0
   plot_df$r2[is.na(plot_df$r2)] <- 0.05

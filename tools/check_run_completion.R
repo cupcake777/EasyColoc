@@ -76,27 +76,38 @@ task_state_dt <- if (file.exists(task_state_file)) {
 }
 event_log_dt <- read_ndjson_safely(event_log_file)
 
+current_event_log_dt <- event_log_dt
+current_pid <- if (!is.null(heartbeat) && !is.null(heartbeat$pid)) {
+  suppressWarnings(as.integer(heartbeat$pid))
+} else {
+  NA_integer_
+}
+if (!is.na(current_pid) && nrow(event_log_dt) > 0 && "pid" %in% names(event_log_dt)) {
+  event_pid <- suppressWarnings(as.integer(event_log_dt$pid))
+  current_event_log_dt <- event_log_dt[event_pid == current_pid]
+}
+
 has_complete_marker <- any(grepl("EasyColoc Analysis Complete!", log_lines, fixed = TRUE))
 has_summary_marker <- any(grepl("[SUM] Merge complete!", log_lines, fixed = TRUE))
 has_report_marker <- any(grepl("[REPORT] Interactive report saved:", log_lines, fixed = TRUE))
 has_failed_tasks <- nrow(task_state_dt) > 0 &&
   "status" %in% names(task_state_dt) &&
   any(task_state_dt$status %in% c("failed"), na.rm = TRUE)
-has_runtime_failures <- nrow(event_log_dt) > 0 &&
-  "stage" %in% names(event_log_dt) &&
-  any(event_log_dt$stage %in% c("gwas_failed", "summary_failed", "report_failed"), na.rm = TRUE)
+has_runtime_failures <- nrow(current_event_log_dt) > 0 &&
+  "stage" %in% names(current_event_log_dt) &&
+  any(current_event_log_dt$stage %in% c("gwas_failed", "summary_failed", "report_failed"), na.rm = TRUE)
 heartbeat_failed <- !is.null(heartbeat) &&
   !is.null(heartbeat$stage) &&
   heartbeat$stage %in% c("pipeline_failed", "summary_failed", "report_failed")
 heartbeat_complete <- !is.null(heartbeat) &&
   !is.null(heartbeat$stage) &&
   identical(as.character(heartbeat$stage), "pipeline_complete")
-event_summary_complete <- nrow(event_log_dt) > 0 &&
-  "stage" %in% names(event_log_dt) &&
-  any(event_log_dt$stage == "summary_complete", na.rm = TRUE)
-event_report_complete <- nrow(event_log_dt) > 0 &&
-  "stage" %in% names(event_log_dt) &&
-  any(event_log_dt$stage == "report_complete", na.rm = TRUE)
+event_summary_complete <- nrow(current_event_log_dt) > 0 &&
+  "stage" %in% names(current_event_log_dt) &&
+  any(current_event_log_dt$stage == "summary_complete", na.rm = TRUE)
+event_report_complete <- nrow(current_event_log_dt) > 0 &&
+  "stage" %in% names(current_event_log_dt) &&
+  any(current_event_log_dt$stage == "report_complete", na.rm = TRUE)
 
 abf_count <- if (dir.exists(file.path(output_dir, "abf"))) {
   length(list.files(file.path(output_dir, "abf"), pattern = "_locus_results\\.csv$", full.names = TRUE))

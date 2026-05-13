@@ -201,6 +201,16 @@ write_task_events <- if (!is.null(cfg_runtime$write_task_events)) {
 } else {
   TRUE
 }
+ld_plink_timeout <- if (!is.null(cfg_runtime$ld_plink_timeout)) {
+  as.integer(cfg_runtime$ld_plink_timeout)
+} else {
+  120L
+}
+if (is.na(ld_plink_timeout) || ld_plink_timeout <= 0L) {
+  ld_plink_timeout <- 120L
+}
+options(easycoloc.ld_plink_timeout = ld_plink_timeout)
+message(glue("[INIT] PLINK LD timeout: {ld_plink_timeout}s"))
 
 base_out_dir <- normalizePath(cfg_global$output_dir, mustWork = FALSE)
 dir_abf <- file.path(base_out_dir, "abf")
@@ -210,7 +220,7 @@ dir_rds <- file.path(base_out_dir, "rds")
 for (d in c(base_out_dir, dir_abf, dir_susie, dir_plots, dir_rds)) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
 
 runtime_fingerprint <- compute_runtime_config_fingerprint(
-  c(cfg_bundle$paths$global, cfg_bundle$paths$gwas, cfg_bundle$paths$qtl, "run_coloc.r")
+  c(cfg_bundle$paths$global, cfg_bundle$paths$gwas, cfg_bundle$paths$qtl, "run_coloc.R")
 )
 initialize_runtime_tracker(
   output_dir = base_out_dir,
@@ -221,7 +231,7 @@ register_active_run(
   log_file = Sys.getenv("EASYCOLOC_LOG_FILE", unset = NA_character_),
   run_label = Sys.getenv("EASYCOLOC_RUN_LABEL", unset = NA_character_),
   parent_pid = suppressWarnings(as.integer(Sys.getenv("EASYCOLOC_PARENT_PID", unset = NA_character_))),
-  command = "Rscript run_coloc.r"
+  command = "Rscript run_coloc.R"
 )
 on.exit(clear_active_run(), add = TRUE)
 append_runtime_event(
@@ -323,8 +333,15 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
   fwrite(clump_write, temp_assoc, sep = "\t", quote = FALSE, col.names = TRUE)
   message(glue("        Wrote {nrow(clump_write)} translated SNPs to {temp_assoc}"))
 
-  keep_cmd <- if (!is.null(keep_file) && file.exists(keep_file)) {
-    glue("--keep {keep_file}")
+  plink_keep_file <- easycoloc_prepare_plink_keep_file(
+    keep_file,
+    bfile = plink_bfile,
+    temp_dir = temp_dir,
+    label = ds_id,
+    verbose = TRUE
+  )
+  keep_cmd <- if (!is.null(plink_keep_file) && file.exists(plink_keep_file)) {
+    glue("--keep {shQuote(plink_keep_file)}")
   } else {
     ""
   }
@@ -386,7 +403,6 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
   Filter(Negate(is.null), loci)
 }
 
-
 run_pipeline <- function() {
   qtl_meta <- fread(cfg_qtl$qtl_info$file)
   qtl_meta <- easycoloc_resolve_qtl_meta_paths(qtl_meta, cfg_qtl$qtl_info$file, cfg_qtl)
@@ -419,6 +435,7 @@ run_pipeline <- function() {
     FALSE
   }
   total_gwas <- length(cfg_gwas$datasets)
+  qtl_build <- if (is.null(cfg_qtl$qtl_info$build)) "hg38" else cfg_qtl$qtl_info$build
   message(glue("[INIT] Using {n_cores} CPU cores"))
   message(glue("[INIT] Per-locus QTL parallelism: {if (parallel_qtl_tasks) 'enabled' else 'disabled'}"))
   message(glue("[INIT] Per-locus LD precompute: {if (precompute_locus_ld) 'enabled' else 'disabled'}"))
@@ -427,6 +444,7 @@ run_pipeline <- function() {
     message_text = "Main GWAS loop started",
     counters = list(total_gwas = total_gwas, total_qtl = nrow(qtl_meta), n_cores = n_cores)
   )
+  pre_harmonize_gwas_caches(cfg_gwas$datasets, qtl_build = qtl_build, n_cores = n_cores)
 
   for (gwas_idx in seq_along(cfg_gwas$datasets)) {
     gwas_cfg <- cfg_gwas$datasets[[gwas_idx]]
@@ -447,6 +465,7 @@ run_pipeline <- function() {
     tryCatch(
       {
         if (!file.exists(gwas_cfg$file)) {
+          pipeline_has_failures <<- TRUE
           warning(glue("File missing: {gwas_cfg$file}"))
           append_runtime_event(
             level = "WARN",
@@ -456,58 +475,9 @@ run_pipeline <- function() {
             extras = list(file = gwas_cfg$file)
           )
         } else {
-          gwas_select_cols <- unique(unname(unlist(gwas_cfg$columns, use.names = FALSE)))
-          gwas_select_cols <- gwas_select_cols[!is.na(gwas_select_cols) & nzchar(gwas_select_cols)]
-          gwas_raw <- fread(gwas_cfg$file, select = gwas_select_cols, showProgress = FALSE)
-          gwas_std <- format_sumstats(
-            gwas_raw,
-            type = "gwas",
-            col_map = as.list(gwas_cfg$columns),
-            case_control = (gwas_cfg$type == "cc"),
-            sample_size_n = gwas_cfg$sample_size_n
-          )
-
-          ref_fasta <- if (gwas_cfg$build == "hg19") cfg_global$ref_genome_hg19 else cfg_global$ref_genome_hg38
           pop <- if (is.null(gwas_cfg$pop)) "EUR" else gwas_cfg$pop
           recom_prefix <- resolve_recom_prefix(cfg_global$recom, pop)
-          build_tag <- tolower(gwas_cfg$build)
-          af_root <- cfg_global[["1kg_af"]]
-          if (is.null(af_root) || !nzchar(af_root)) {
-            stop("1kg_af not configured in global config")
-          }
-          ref_vcf_1kg_candidates <- c(
-            file.path(af_root, build_tag, glue("{pop}_AF.vcf.gz")),
-            file.path(af_root, build_tag, glue("{pop}_AF.tsv.gz")),
-            file.path(af_root, glue("1KG_{build_tag}_{pop}_AF.vcf.gz")),
-            file.path(af_root, glue("1KG_{build_tag}_{pop}_AF.tsv.gz"))
-          )
-          existing_ref_vcf <- ref_vcf_1kg_candidates[file.exists(ref_vcf_1kg_candidates)]
-          if (length(existing_ref_vcf) > 0) {
-            ref_vcf_1kg <- existing_ref_vcf[[1]]
-          } else {
-            ref_vcf_1kg <- ref_vcf_1kg_candidates[[1]]
-          }
-          ref_dbsnp <- if (gwas_cfg$build == "hg19") cfg_global[["dbsnp_hg19"]] else cfg_global[["dbsnp_hg38"]]
-          ref_alt_freq <- "AF"
-          qtl_build <- if (is.null(cfg_qtl$qtl_info$build)) "hg38" else cfg_qtl$qtl_info$build
-
-          gwas_harm <- run_easycoloc_harmonization(
-            gwas_std,
-            ref_fasta = ref_fasta,
-            ref_vcf = ref_vcf_1kg,
-            ref_dbsnp = ref_dbsnp,
-            ref_alt_freq = ref_alt_freq,
-            source_build = if (is.null(gwas_cfg$build)) "19" else gsub("hg", "", gwas_cfg$build),
-            target_build = gsub("hg", "", qtl_build),
-            n_threads = cfg_global$n_cores,
-            save_dir = cfg_global$harmonize_dir,
-            dataset_id = gwas_cfg$id,
-            input_file = gwas_cfg$file,
-            liftover_chain = cfg_global$harmonization_settings$liftover_chain,
-            sample_size_n = gwas_cfg$sample_size_n
-          )
-
-          gwas_harm <- easycoloc_standardize_harmonized_gwas(gwas_harm, sample_size_n = gwas_cfg$sample_size_n)
+          gwas_harm <- prepare_gwas_harmony(gwas_cfg, qtl_build = qtl_build, n_threads = n_cores)
 
           plink_build <- if (is.null(cfg_qtl$qtl_info$build)) "hg38" else as.character(cfg_qtl$qtl_info$build)
           plink_ref_hg38 <- if (identical(plink_build, "hg19")) cfg_global$plink_hg19 else cfg_global$plink_hg38
@@ -859,7 +829,7 @@ run_pipeline <- function() {
                               qtl_all_chrom = "CHR.qtl",
                               qtl_all_pvalue = "P.qtl",
                               leadSNP_DF = input_data,
-                              ld_df = NULL,
+                              ld_df = if (!is.null(locus_ld_res)) locus_ld_res else NULL,
                               gtf_path = cfg_global$gene_anno,
                               region_recomb = recomb_data,
                               recomb_path = recom_prefix,

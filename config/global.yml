@@ -10,7 +10,7 @@ random_seed: 20240326  # Global seed for reproducibility (SuSiE, parallel proces
 # Replace these with project-local paths, or keep the same layout under `refs/`.
 plink_hg19: "refs/plink/hg19/1kg_hg19_filtered"
 plink_hg38: "refs/plink/hg38/1kg_hg38_filtered"
-plink_keep:                                    # map: pop code -> sample file; omit a pop to use all samples
+plink_keep:                                    # map: pop code -> PLINK --keep file; recommended format: two columns FID IID; one-column IID is accepted and converted at runtime
   EAS: "refs/plink/keep/EAS.sample"
   EUR: "refs/plink/keep/EUR.sample"
 hash_table_dir: ""
@@ -57,9 +57,13 @@ runtime:
   write_task_events: true
   parallel_qtl_tasks: false
   precompute_locus_ld: false
+  ld_plink_timeout: 120
 
 harmonization_settings:
   liftover_chain: "refs/liftover/hg19ToHg38.over.chain.gz"
+  chunked: true
+  chunk_min_rows: 1000000
+  chunk_parallel_jobs: 1
 
 sensitivity_analysis:
   enabled: false

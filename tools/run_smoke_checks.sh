@@ -23,6 +23,8 @@ run_step "Running toy demo bootstrap smoke check" Rscript tools/checks/smoke_tes
 run_step "Running 1KG setup smoke check" Rscript tools/checks/smoke_test_1kg_setup.R
 run_step "Running GTEx bootstrap smoke check" Rscript tools/checks/smoke_test_gtex_bootstrap.R
 run_step "Running LD cache smoke check" Rscript tools/checks/smoke_test_ld_cache.R
+run_step "Running LD timeout smoke check" Rscript tools/checks/smoke_test_ld_timeout.R
+run_step "Running chunked harmonization smoke check" Rscript tools/checks/smoke_test_chunked_harmonization.R
 run_step "Running report web data smoke check" Rscript tools/checks/smoke_test_report_web_data.R
 run_step "Running CLI example check" bash examples/checks/check_cli.sh
 run_step "Running report web CLI example check" bash examples/checks/check_report_web_cli.sh

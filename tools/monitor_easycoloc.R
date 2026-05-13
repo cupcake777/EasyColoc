@@ -91,8 +91,13 @@ heartbeat_matches_active_run <- !is.null(active_run) &&
 active_run_pid_alive <- !is.null(active_run) &&
   !is.null(active_run$pid) &&
   pid_is_alive(active_run$pid)
+heartbeat_is_terminal <- !is.null(heartbeat) &&
+  !is.null(heartbeat$stage) &&
+  heartbeat$stage %in% c("pipeline_complete", "pipeline_failed", "summary_failed", "report_failed")
 active_run_state <- if (is.null(active_run)) {
   "missing"
+} else if (isTRUE(heartbeat_is_terminal) && isTRUE(heartbeat_matches_active_run)) {
+  "finished"
 } else if (isTRUE(active_run_pid_alive) || (isTRUE(heartbeat_recent) && isTRUE(heartbeat_matches_active_run))) {
   "running"
 } else {

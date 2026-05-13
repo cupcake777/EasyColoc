@@ -198,10 +198,10 @@ easycoloc_collect_reference_requirements <- function(cfg_bundle, include_qtl_fil
     required = FALSE,
     path = cfg_global$plink_keep,
     path_type = "file",
-    format = "PLINK keep file",
+    format = "PLINK --keep file, recommended two columns: FID IID",
     used_for = "population-specific LD subset",
     stage = "optional",
-    note = "If missing, EasyColoc falls back to all samples in the PLINK reference."
+    note = "If missing, EasyColoc falls back to all samples in the PLINK reference. One-column IID files are accepted and converted at runtime."
   )
   rows <- add_row(
     rows,

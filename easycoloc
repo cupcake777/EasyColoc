@@ -15,6 +15,7 @@ Commands:
   run        Run the main pipeline (`--managed` for wrapped execution)
   doctor     Validate configs, core inputs and external dependencies
   init       Scaffold a minimal EasyColoc analysis project
+  harmonize  Generate harmonized GWAS cache files without running coloc
   check      Check whether a run completed successfully
   status     Summarize per-GWAS progress and output counts
   monitor    Print the latest runtime heartbeat and output snapshot
@@ -152,6 +153,15 @@ case "${cmd}" in
       exec Rscript tools/doctor_easycoloc.R "${COMMON_PASSTHROUGH[@]}"
     else
       exec Rscript tools/doctor_easycoloc.R
+    fi
+    ;;
+  harmonize)
+    parse_common_flags "$@"
+    set_config_envs "${COMMON_GLOBAL_CFG}" "${COMMON_GWAS_CFG}" "${COMMON_QTL_CFG}"
+    if (( ${#COMMON_PASSTHROUGH[@]} > 0 )); then
+      exec Rscript tools/harmonize_gwas.R "${COMMON_PASSTHROUGH[@]}"
+    else
+      exec Rscript tools/harmonize_gwas.R
     fi
     ;;
   init)

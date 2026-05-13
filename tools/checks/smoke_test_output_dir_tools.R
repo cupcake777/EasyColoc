@@ -123,6 +123,28 @@ append_runtime_event(
   stage = "report_complete",
   message_text = "report.html"
 )
+cat(
+  toJSON(
+    list(
+      timestamp = "2098-01-01 00:00:00",
+      pid = 1L,
+      level = "ERROR",
+      stage = "gwas_failed",
+      message = "stale failed event from a previous run",
+      gwas_id = "STALE_GWAS",
+      locus_id = NULL,
+      qtl_id = NULL,
+      phenotype = NULL,
+      task_id = NULL,
+      extras = list()
+    ),
+    auto_unbox = TRUE,
+    null = "null"
+  ),
+  "\n",
+  file = file.path(tmp_heartbeat_complete_dir, "runtime", "event_log.ndjson"),
+  append = TRUE
+)
 fwrite(
   data.table(
     GWAS_ID = "HB_GWAS",

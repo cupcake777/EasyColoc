@@ -91,10 +91,10 @@ trap cleanup INT TERM
 render_progress() {
   local processed_gwas current_gwas abf_count rds_count plot_count filled bar_width
   processed_gwas="$(grep -c '^Processing GWAS Dataset:' "${log_file}" 2>/dev/null || true)"
-  current_gwas="$(grep '^Processing GWAS Dataset:' "${log_file}" 2>/dev/null | tail -n 1 | sed 's/^Processing GWAS Dataset: //')"
-  abf_count="$(find "${output_dir}/abf" -maxdepth 1 -type f -name '*_locus_results.csv' 2>/dev/null | wc -l | tr -d ' ')"
-  rds_count="$(find "${output_dir}/rds" -maxdepth 1 -type f -name '*.rds' 2>/dev/null | wc -l | tr -d ' ')"
-  plot_count="$(find "${output_dir}/plots" -maxdepth 1 -type f \( -name '*.pdf' -o -name '*.png' \) 2>/dev/null | wc -l | tr -d ' ')"
+  current_gwas="$(grep '^Processing GWAS Dataset:' "${log_file}" 2>/dev/null | tail -n 1 | sed 's/^Processing GWAS Dataset: //' || true)"
+  abf_count="$(if [[ -d "${output_dir}/abf" ]]; then find "${output_dir}/abf" -maxdepth 1 -type f -name '*_locus_results.csv' | wc -l | tr -d ' '; else printf '0'; fi)"
+  rds_count="$(if [[ -d "${output_dir}/rds" ]]; then find "${output_dir}/rds" -maxdepth 1 -type f -name '*.rds' | wc -l | tr -d ' '; else printf '0'; fi)"
+  plot_count="$(if [[ -d "${output_dir}/plots" ]]; then find "${output_dir}/plots" -maxdepth 1 -type f \( -name '*.pdf' -o -name '*.png' \) | wc -l | tr -d ' '; else printf '0'; fi)"
   bar_width=24
   if [[ "${total_gwas}" -gt 0 ]]; then
     filled=$(( processed_gwas * bar_width / total_gwas ))
@@ -114,8 +114,10 @@ while kill -0 "${run_pid}" 2>/dev/null; do
   sleep 5
 done
 
+set +e
 wait "${run_pid}"
 exit_code=$?
+set -e
 printf '\n'
 
 echo "[RUN] pipeline exited with code ${exit_code}"
@@ -136,8 +138,20 @@ fi
 echo "[RUN] checking completion"
 if Rscript tools/check_run_completion.R "${output_dir}"; then
   echo "[RUN] completion check passed"
+  completion_exit_code=0
 else
   echo "[RUN] completion check failed"
+  completion_exit_code=1
 fi
 
-exit "${exit_code}"
+if [[ "${completion_exit_code}" -eq 0 ]]; then
+  if [[ "${exit_code}" -ne 0 ]]; then
+    echo "[RUN] pipeline process exited non-zero, but completion check passed; treating run as complete"
+  fi
+  exit 0
+fi
+
+if [[ "${exit_code}" -ne 0 ]]; then
+  exit "${exit_code}"
+fi
+exit "${completion_exit_code}"

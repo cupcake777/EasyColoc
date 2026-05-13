@@ -19,6 +19,65 @@ if (file.exists("src/utils_hash.R")) {
 .ld_cache <- new.env(parent = emptyenv())
 .tabix_cache <- new.env(parent = emptyenv())
 
+easycoloc_prepare_plink_keep_file <- function(keep_file,
+                                              bfile = NULL,
+                                              temp_dir = tempdir(),
+                                              label = "keep",
+                                              verbose = TRUE) {
+  if (is.null(keep_file) || !nzchar(keep_file) || !file.exists(keep_file)) {
+    return(NULL)
+  }
+  keep_dt <- tryCatch(
+    data.table::fread(keep_file, header = FALSE, fill = TRUE, showProgress = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(keep_dt) || nrow(keep_dt) == 0) {
+    stop(glue("[PLINK] Keep file is empty or unreadable: {keep_file}"), call. = FALSE)
+  }
+  if (ncol(keep_dt) >= 2) {
+    return(keep_file)
+  }
+
+  iid <- unique(trimws(as.character(keep_dt[[1]])))
+  iid <- iid[!is.na(iid) & nzchar(iid)]
+  if (length(iid) == 0) {
+    stop(glue("[PLINK] One-column keep file has no sample IDs: {keep_file}"), call. = FALSE)
+  }
+
+  keep_out <- data.table::data.table(FID = "0", IID = iid)
+  fam_file <- if (!is.null(bfile) && nzchar(bfile)) paste0(bfile, ".fam") else NULL
+  if (!is.null(fam_file) && file.exists(fam_file)) {
+    fam_dt <- data.table::fread(
+      fam_file,
+      header = FALSE,
+      select = c(1, 2),
+      col.names = c("FID", "IID"),
+      showProgress = FALSE
+    )
+    fam_dt[, IID := as.character(IID)]
+    matched <- fam_dt[IID %in% iid, .(FID = as.character(FID), IID)]
+    missing_iid <- setdiff(iid, matched$IID)
+    if (length(missing_iid) > 0 && isTRUE(verbose)) {
+      message(glue("[PLINK] Keep file {basename(keep_file)}: {length(missing_iid)} IDs not found in {basename(fam_file)} and will be omitted"))
+    }
+    keep_out <- unique(matched)
+    if (nrow(keep_out) == 0) {
+      stop(glue("[PLINK] No keep-file samples overlap PLINK .fam: {keep_file}"), call. = FALSE)
+    }
+  } else if (isTRUE(verbose)) {
+    message(glue("[PLINK] Converting one-column keep file {basename(keep_file)} to FID/IID format with FID=0"))
+  }
+
+  dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
+  safe_label <- gsub("[^A-Za-z0-9_.-]+", "_", label)
+  out_file <- tempfile(pattern = paste0("easycoloc_", safe_label, "_keep_"), tmpdir = temp_dir, fileext = ".sample")
+  data.table::fwrite(keep_out, out_file, sep = "\t", col.names = FALSE, quote = FALSE)
+  if (isTRUE(verbose)) {
+    message(glue("[PLINK] Converted one-column keep file for {label}: {basename(keep_file)} -> {basename(out_file)} ({nrow(keep_out)} samples)"))
+  }
+  out_file
+}
+
 ld_cache_group_key <- function(bfile, keep_file) {
   paste(
     normalizePath(bfile, mustWork = FALSE),
@@ -44,7 +103,15 @@ ld_cache_lookup <- function(variants, bfile, keep_file = NULL) {
   exact_key <- ld_cache_entry_key(req_snps)
   if (!is.null(group_entries[[exact_key]])) {
     entry <- group_entries[[exact_key]]
-    return(list(R = entry$R, snp_info = entry$snp_info))
+    available <- req_snps[req_snps %in% rownames(entry$R) & req_snps %in% colnames(entry$R)]
+    if (length(available) == 0) {
+      return(NULL)
+    }
+    snp_info <- entry$snp_info[match(available, entry$snp_info$SNP), ]
+    return(list(
+      R = entry$R[available, available, drop = FALSE],
+      snp_info = snp_info
+    ))
   }
 
   candidate_keys <- names(group_entries)
@@ -55,7 +122,8 @@ ld_cache_lookup <- function(variants, bfile, keep_file = NULL) {
   best_size <- Inf
   for (entry_key in candidate_keys) {
     entry <- group_entries[[entry_key]]
-    if (is.null(entry) || length(entry$snps) < length(req_snps)) next
+    if (is.null(entry) || is.null(entry$R)) next
+    if (length(entry$snps) < length(req_snps)) next
     if (all(req_snps %in% entry$snps) && length(entry$snps) < best_size) {
       best_entry <- entry
       best_size <- length(entry$snps)
@@ -64,10 +132,17 @@ ld_cache_lookup <- function(variants, bfile, keep_file = NULL) {
   if (is.null(best_entry)) {
     return(NULL)
   }
-  idx <- match(req_snps, best_entry$snps)
-  snp_info <- best_entry$snp_info[match(req_snps, best_entry$snp_info$SNP), ]
+  available <- req_snps[
+    req_snps %in% best_entry$snps &
+      req_snps %in% rownames(best_entry$R) &
+      req_snps %in% colnames(best_entry$R)
+  ]
+  if (length(available) == 0) {
+    return(NULL)
+  }
+  snp_info <- best_entry$snp_info[match(available, best_entry$snp_info$SNP), ]
   list(
-    R = best_entry$R[idx, idx, drop = FALSE],
+    R = best_entry$R[available, available, drop = FALSE],
     snp_info = snp_info
   )
 }
@@ -76,9 +151,14 @@ ld_cache_store <- function(variants, bfile, keep_file = NULL, ld_res, max_entrie
   if (is.null(ld_res) || is.null(ld_res$R)) {
     return(invisible(FALSE))
   }
-  snps <- sort(unique(as.character(variants)))
+  mat_snps <- intersect(rownames(ld_res$R), colnames(ld_res$R))
+  snps <- sort(unique(as.character(mat_snps)))
   if (length(snps) == 0) {
     return(invisible(FALSE))
+  }
+  ld_res$R <- ld_res$R[snps, snps, drop = FALSE]
+  if (!is.null(ld_res$snp_info) && "SNP" %in% names(ld_res$snp_info)) {
+    ld_res$snp_info <- ld_res$snp_info[match(snps, ld_res$snp_info$SNP), ]
   }
   group_key <- ld_cache_group_key(bfile, keep_file)
   group_entries <- if (exists(group_key, envir = .ld_cache, inherits = FALSE)) {
@@ -563,10 +643,23 @@ easycoloc_query_vcf_regions <- function(dt,
   region_chr <- easycoloc_map_chr_for_vcf(dt$CHR[ok], vcf_file = vcf_file, build = build)
   region_dt <- data.table::data.table(
     CHROM = region_chr,
-    FROM = as.integer(dt$POS[ok]) - 1L,
-    TO = as.integer(dt$POS[ok])
+    POS = as.integer(dt$POS[ok])
   )
+  region_dt <- unique(region_dt[!is.na(CHROM) & !is.na(POS)])
+  merge_gap_bp <- suppressWarnings(as.integer(Sys.getenv("EASYCOLOC_VCF_REGION_MERGE_GAP_BP", unset = "100")))
+  if (is.na(merge_gap_bp) || merge_gap_bp < 0L) merge_gap_bp <- 0L
+  data.table::setorder(region_dt, CHROM, POS)
+  region_dt[, GROUP := cumsum(c(TRUE, diff(POS) > merge_gap_bp + 1L)), by = CHROM]
+  region_dt <- region_dt[, .(
+    FROM = max(0L, min(POS) - 1L),
+    TO = max(POS)
+  ), by = .(CHROM, GROUP)]
+  region_dt[, GROUP := NULL]
   region_dt <- unique(region_dt[!is.na(CHROM) & !is.na(FROM) & !is.na(TO)])
+  data.table::setorder(region_dt, CHROM, FROM, TO)
+  if (isTRUE(verbose)) {
+    message(glue("[EasyColoc Harmonize] {label} query regions: {sum(ok)} variants -> {nrow(region_dt)} intervals (merge_gap_bp={merge_gap_bp})"))
+  }
   data.table::fwrite(region_dt, tmp_regions, sep = "\t", col.names = FALSE, quote = FALSE)
 
   fmt <- paste0(paste(fields, collapse = "\\t"), "\\n")
@@ -837,59 +930,16 @@ easycoloc_liftover_table <- function(dt, liftover_chain, source_build, target_bu
   res
 }
 
-run_easycoloc_harmonization <- function(sumstats_dt,
-                                        ref_fasta,
-                                        ref_vcf = NULL,
-                                        ref_dbsnp = NULL,
-                                        ref_alt_freq = "AF",
-                                        source_build = "19",
-                                        target_build = "38",
-                                        n_threads = 4,
-                                        save_dir = NULL,
-                                        dataset_id = NULL,
-                                        input_file = NULL,
-                                        verbose = TRUE,
-                                        liftover_chain = NULL,
-                                        sample_size_n = NULL) {
-  log_message <- function(..., verbose = TRUE) {
-    if (isTRUE(verbose)) message(...)
-  }
-  log_message("--- Starting EasyColoc Native Harmonization & LiftOver ---", verbose = verbose)
-
-  source_file <- input_file
-  use_cache <- !is.null(save_dir) && !is.null(dataset_id)
-  final_output_file <- NULL
-  if (use_cache) {
-    if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
-    final_output_file <- file.path(save_dir, glue("{dataset_id}_b{source_build}to{target_build}_harmonized.tsv"))
-    if (file.exists(final_output_file)) {
-      cache_info <- file.info(final_output_file)
-      cache_mtime <- cache_info$mtime
-      cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
-      ref_mtime <- if (file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
-      input_mtime <- if (!is.null(source_file) && file.exists(source_file)) file.info(source_file)$mtime else NA
-      dep_mtime <- max(c(ref_mtime, input_mtime), na.rm = TRUE)
-      required_cache_cols <- easycoloc_harmonized_gwas_output_cols()
-      cache_header <- if (cache_size_ok) {
-        tryCatch(names(data.table::fread(final_output_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
-      } else {
-        character()
-      }
-      cache_schema_ok <- identical(cache_header, required_cache_cols)
-      cache_ok <- cache_size_ok && cache_schema_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
-      if (cache_ok) {
-        log_message(glue("Found cached harmonized file: {final_output_file}"), verbose = verbose)
-        cached_dt <- data.table::fread(final_output_file)
-        return(easycoloc_standardize_harmonized_gwas(cached_dt, sample_size_n = sample_size_n))
-      }
-      if (!cache_schema_ok) {
-        log_message(glue("Cached file lacks canonical harmony schema and will be regenerated: {final_output_file}"), verbose = verbose)
-      } else {
-        log_message(glue("Cached file is outdated or empty: {final_output_file}"), verbose = verbose)
-      }
-    }
-  }
-
+easycoloc_harmonize_table_full <- function(sumstats_dt,
+                                           ref_fasta,
+                                           ref_vcf = NULL,
+                                           ref_dbsnp = NULL,
+                                           ref_alt_freq = "AF",
+                                           source_build = "19",
+                                           target_build = "38",
+                                           liftover_chain = NULL,
+                                           sample_size_n = NULL,
+                                           verbose = TRUE) {
   res_dt <- easycoloc_standardize_harmonized_gwas(sumstats_dt, sample_size_n = sample_size_n)
   if ("CHR" %in% names(res_dt)) res_dt[, CHR := gsub("^chr", "", as.character(CHR), ignore.case = TRUE)]
   if ("POS" %in% names(res_dt)) res_dt[, POS := as.integer(POS)]
@@ -945,7 +995,343 @@ run_easycoloc_harmonization <- function(sumstats_dt,
   }
   res_dt <- easycoloc_standardize_harmonized_gwas(res_dt, sample_size_n = sample_size_n)
   easycoloc_validate_harmonized(res_dt, verbose = verbose)
-  output_dt <- easycoloc_prepare_harmonized_gwas_output(res_dt, sample_size_n = sample_size_n)
+  easycoloc_prepare_harmonized_gwas_output(res_dt, sample_size_n = sample_size_n)
+}
+
+easycoloc_harmony_part_dir <- function(final_output_file) {
+  paste0(final_output_file, ".parts")
+}
+
+easycoloc_file_signature <- function(path) {
+  if (is.null(path) || !nzchar(path) || !file.exists(path)) {
+    return("missing")
+  }
+  info <- file.info(path)
+  paste(
+    normalizePath(path, mustWork = FALSE),
+    ifelse(is.na(info$size), "NA", info$size),
+    ifelse(is.na(info$mtime), "NA", format(info$mtime, "%Y-%m-%d %H:%M:%S %Z")),
+    sep = "|"
+  )
+}
+
+easycoloc_harmony_dependency_signature <- function(input_file = NULL,
+                                                   ref_fasta = NULL,
+                                                   ref_vcf = NULL,
+                                                   ref_dbsnp = NULL,
+                                                   liftover_chain = NULL,
+                                                   source_build = "19",
+                                                   target_build = "38",
+                                                   sample_size_n = NULL) {
+  pieces <- c(
+    paste0("input=", easycoloc_file_signature(input_file)),
+    paste0("ref_fasta=", easycoloc_file_signature(ref_fasta)),
+    paste0("ref_vcf=", easycoloc_file_signature(ref_vcf)),
+    paste0("ref_dbsnp=", easycoloc_file_signature(ref_dbsnp)),
+    paste0("liftover_chain=", easycoloc_file_signature(liftover_chain)),
+    paste0("source_build=", source_build),
+    paste0("target_build=", target_build),
+    paste0("sample_size_n=", if (is.null(sample_size_n)) "NA" else sample_size_n),
+    paste0("assign_rsid=", Sys.getenv("EASYCOLOC_ASSIGN_RSID", unset = "auto")),
+    paste0("schema=", paste(easycoloc_harmonized_gwas_output_cols(), collapse = ","))
+  )
+  paste(pieces, collapse = ";;")
+}
+
+easycoloc_done_value <- function(done_file, key) {
+  if (!file.exists(done_file)) return(NA_character_)
+  lines <- readLines(done_file, warn = FALSE)
+  hit <- grep(paste0("^", key, "="), lines, value = TRUE)
+  if (length(hit) == 0) return(NA_character_)
+  sub(paste0("^", key, "="), "", hit[[length(hit)]])
+}
+
+easycoloc_part_file_ok <- function(path, done_file = NULL, dependency_signature = NULL) {
+  if (!file.exists(path)) return(FALSE)
+  info <- file.info(path)
+  if (is.na(info$size) || info$size <= 0) return(FALSE)
+  header <- tryCatch(names(data.table::fread(path, nrows = 0, showProgress = FALSE)), error = function(e) character())
+  if (!identical(header, easycoloc_harmonized_gwas_output_cols())) return(FALSE)
+  if (!is.null(dependency_signature) && !is.null(done_file)) {
+    done_sig <- easycoloc_done_value(done_file, "dependency_signature")
+    return(identical(done_sig, dependency_signature))
+  }
+  TRUE
+}
+
+easycoloc_chr_sort_key <- function(chr) {
+  chr <- gsub("^chr", "", as.character(chr), ignore.case = TRUE)
+  fifelse(chr %in% as.character(1:22), sprintf("%02d", as.integer(chr)), fifelse(chr == "X", "23", fifelse(chr == "Y", "24", fifelse(chr %in% c("M", "MT"), "25", paste0("99_", chr)))))
+}
+
+easycoloc_harmonize_table_chunked <- function(sumstats_dt,
+                                              ref_fasta,
+                                              ref_vcf = NULL,
+                                              ref_dbsnp = NULL,
+                                              ref_alt_freq = "AF",
+                                              source_build = "19",
+                                              target_build = "38",
+                                              liftover_chain = NULL,
+                                              sample_size_n = NULL,
+                                              final_output_file,
+                                              chunk_by = "chr",
+                                              chunk_min_rows = 1000000L,
+                                              chunk_parallel_jobs = 1L,
+                                              input_file = NULL,
+                                              dependency_signature = NULL,
+                                              verbose = TRUE) {
+  if (is.null(final_output_file) || !nzchar(final_output_file)) {
+    stop("final_output_file is required for chunked harmonization")
+  }
+  base_dt <- easycoloc_standardize_harmonized_gwas(sumstats_dt, sample_size_n = sample_size_n)
+  if (!"CHR" %in% names(base_dt)) {
+    stop("CHR column is required for chunked harmonization")
+  }
+  base_dt[, CHR := gsub("^chr", "", as.character(CHR), ignore.case = TRUE)]
+  part_dir <- easycoloc_harmony_part_dir(final_output_file)
+  dir.create(part_dir, recursive = TRUE, showWarnings = FALSE)
+  if (is.null(dependency_signature)) {
+    dependency_signature <- easycoloc_harmony_dependency_signature(
+      input_file = input_file,
+      ref_fasta = ref_fasta,
+      ref_vcf = ref_vcf,
+      ref_dbsnp = ref_dbsnp,
+      liftover_chain = liftover_chain,
+      source_build = source_build,
+      target_build = target_build,
+      sample_size_n = sample_size_n
+    )
+  }
+
+  chrs <- unique(base_dt$CHR)
+  chrs <- chrs[!is.na(chrs) & nzchar(chrs)]
+  chrs <- chrs[order(easycoloc_chr_sort_key(chrs))]
+  if (length(chrs) == 0) {
+    stop("No valid chromosomes found for chunked harmonization")
+  }
+  manifest_rows <- vector("list", length(chrs))
+  part_files <- character(length(chrs))
+  chunk_jobs <- list()
+  log_message <- function(..., verbose = TRUE) {
+    if (isTRUE(verbose)) message(...)
+  }
+  log_message(glue("[EasyColoc Harmonize] Chunked full harmonization: chunks={length(chrs)}, part_dir={part_dir}"), verbose = verbose)
+
+  for (idx in seq_along(chrs)) {
+    chr <- chrs[[idx]]
+    safe_chr <- gsub("[^A-Za-z0-9_.-]+", "_", chr)
+    part_file <- file.path(part_dir, glue("chr{safe_chr}.tsv"))
+    done_file <- paste0(part_file, ".done")
+    part_files[[idx]] <- part_file
+    chr_n <- sum(base_dt$CHR == chr, na.rm = TRUE)
+    if (file.exists(done_file) && easycoloc_part_file_ok(part_file, done_file = done_file, dependency_signature = dependency_signature)) {
+      elapsed_sec <- suppressWarnings(as.numeric(easycoloc_done_value(done_file, "elapsed_sec")))
+      output_rows <- suppressWarnings(as.integer(easycoloc_done_value(done_file, "output_rows")))
+      log_message(glue("[EasyColoc Harmonize] Reusing completed chunk {idx}/{length(chrs)} chr{chr}: {part_file}"), verbose = verbose)
+      manifest_rows[[idx]] <- data.table::data.table(chunk = idx, chr = chr, input_rows = chr_n, rows = output_rows, elapsed_sec = elapsed_sec, output = part_file, status = "cached")
+      next
+    }
+    chunk_jobs[[length(chunk_jobs) + 1L]] <- list(
+      idx = idx,
+      chr = chr,
+      chr_n = chr_n,
+      part_file = part_file,
+      done_file = done_file
+    )
+  }
+
+  chunk_parallel_jobs <- suppressWarnings(as.integer(chunk_parallel_jobs))
+  if (is.na(chunk_parallel_jobs) || chunk_parallel_jobs < 1L) chunk_parallel_jobs <- 1L
+  chunk_parallel_jobs <- min(chunk_parallel_jobs, length(chunk_jobs))
+  if (length(chunk_jobs) > 0L) {
+    log_message(glue("[EasyColoc Harmonize] Processing {length(chunk_jobs)} chunk(s) with {chunk_parallel_jobs} parallel job(s)"), verbose = verbose)
+  }
+
+  run_chunk_job <- function(job) {
+    idx <- job$idx
+    chr <- job$chr
+    chr_n <- job$chr_n
+    part_file <- job$part_file
+    done_file <- job$done_file
+    chunk_start <- Sys.time()
+    log_message(glue("[EasyColoc Harmonize] Chunk {idx}/{length(chrs)} chr{chr}: input_rows={chr_n} start={format(chunk_start, '%Y-%m-%d %H:%M:%S %Z')}"), verbose = verbose)
+    chunk_dt <- base_dt[CHR == chr]
+    output_dt <- easycoloc_harmonize_table_full(
+      chunk_dt,
+      ref_fasta = ref_fasta,
+      ref_vcf = ref_vcf,
+      ref_dbsnp = ref_dbsnp,
+      ref_alt_freq = ref_alt_freq,
+      source_build = source_build,
+      target_build = target_build,
+      liftover_chain = liftover_chain,
+      sample_size_n = sample_size_n,
+      verbose = verbose
+    )
+    tmp_part <- tempfile(pattern = paste0(basename(part_file), "."), tmpdir = dirname(part_file), fileext = ".tmp")
+    data.table::fwrite(output_dt, tmp_part, sep = "\t", na = "NA", quote = FALSE)
+    if (!file.rename(tmp_part, part_file)) {
+      file.copy(tmp_part, part_file, overwrite = TRUE)
+      file.remove(tmp_part)
+    }
+    chunk_end <- Sys.time()
+    elapsed_sec <- as.numeric(difftime(chunk_end, chunk_start, units = "secs"))
+    tmp_done <- tempfile(pattern = paste0(basename(done_file), "."), tmpdir = dirname(done_file), fileext = ".tmp")
+    writeLines(c(
+      glue("chunk={idx}"),
+      glue("chr={chr}"),
+      glue("input_rows={chr_n}"),
+      glue("output_rows={nrow(output_dt)}"),
+      glue("started={format(chunk_start, '%Y-%m-%d %H:%M:%S %Z')}"),
+      glue("completed={format(chunk_end, '%Y-%m-%d %H:%M:%S %Z')}"),
+      glue("elapsed_sec={round(elapsed_sec, 3)}"),
+      glue("dependency_signature={dependency_signature}")
+    ), tmp_done)
+    if (!file.rename(tmp_done, done_file)) {
+      file.copy(tmp_done, done_file, overwrite = TRUE)
+      file.remove(tmp_done)
+    }
+    log_message(glue("[EasyColoc Harmonize] Chunk {idx}/{length(chrs)} chr{chr} complete: output_rows={nrow(output_dt)}, elapsed_sec={round(elapsed_sec, 1)}"), verbose = verbose)
+    data.table::data.table(chunk = idx, chr = chr, input_rows = chr_n, rows = nrow(output_dt), elapsed_sec = elapsed_sec, output = part_file, status = "completed")
+  }
+
+  if (length(chunk_jobs) > 0L) {
+    completed_rows <- if (chunk_parallel_jobs > 1L && .Platform$OS.type == "unix") {
+      parallel::mclapply(chunk_jobs, run_chunk_job, mc.cores = chunk_parallel_jobs, mc.set.seed = TRUE)
+    } else {
+      lapply(chunk_jobs, run_chunk_job)
+    }
+    for (row in completed_rows) {
+      manifest_rows[[row$chunk[[1]]]] <- row
+    }
+  }
+
+  part_done_files <- paste0(part_files, ".done")
+  valid_part_files <- part_files[mapply(function(path, done) {
+    easycoloc_part_file_ok(path, done_file = done, dependency_signature = dependency_signature)
+  }, part_files, part_done_files)]
+  if (length(valid_part_files) != length(part_files)) {
+    missing_parts <- setdiff(part_files, valid_part_files)
+    stop(glue("Chunked harmonization did not produce all part files: {paste(basename(missing_parts), collapse = ', ')}"))
+  }
+  manifest <- data.table::rbindlist(manifest_rows, fill = TRUE)
+  manifest[, dependency_signature := dependency_signature]
+  data.table::fwrite(manifest, file.path(part_dir, "manifest.tsv"), sep = "\t", quote = FALSE, na = "NA")
+  log_message(glue("[EasyColoc Harmonize] Combining {length(valid_part_files)} chunk files"), verbose = verbose)
+  output_dt <- data.table::rbindlist(lapply(valid_part_files, data.table::fread, showProgress = FALSE), use.names = TRUE)
+  output_dt <- easycoloc_prepare_harmonized_gwas_output(output_dt, sample_size_n = sample_size_n)
+  data.table::fwrite(output_dt, final_output_file, sep = "\t", na = "NA", quote = FALSE)
+  log_message(glue("Saved result to: {final_output_file}"), verbose = verbose)
+  output_dt
+}
+
+run_easycoloc_harmonization <- function(sumstats_dt,
+                                        ref_fasta,
+                                        ref_vcf = NULL,
+                                        ref_dbsnp = NULL,
+                                        ref_alt_freq = "AF",
+                                        source_build = "19",
+                                        target_build = "38",
+                                        n_threads = 4,
+                                        save_dir = NULL,
+                                        dataset_id = NULL,
+                                        input_file = NULL,
+                                        verbose = TRUE,
+                                        liftover_chain = NULL,
+                                        sample_size_n = NULL,
+                                        chunked = NULL,
+                                        chunk_min_rows = 1000000L,
+                                        chunk_parallel_jobs = 1L) {
+  log_message <- function(..., verbose = TRUE) {
+    if (isTRUE(verbose)) message(...)
+  }
+  log_message("--- Starting EasyColoc Native Harmonization & LiftOver ---", verbose = verbose)
+  dependency_signature <- easycoloc_harmony_dependency_signature(
+    input_file = input_file,
+    ref_fasta = ref_fasta,
+    ref_vcf = ref_vcf,
+    ref_dbsnp = ref_dbsnp,
+    liftover_chain = liftover_chain,
+    source_build = source_build,
+    target_build = target_build,
+    sample_size_n = sample_size_n
+  )
+
+  source_file <- input_file
+  use_cache <- !is.null(save_dir) && !is.null(dataset_id)
+  final_output_file <- NULL
+  if (use_cache) {
+    if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
+    final_output_file <- file.path(save_dir, glue("{dataset_id}_b{source_build}to{target_build}_harmonized.tsv"))
+    if (file.exists(final_output_file)) {
+      cache_info <- file.info(final_output_file)
+      cache_mtime <- cache_info$mtime
+      cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
+      ref_mtime <- if (file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
+      input_mtime <- if (!is.null(source_file) && file.exists(source_file)) file.info(source_file)$mtime else NA
+      dep_mtimes <- c(ref_mtime, input_mtime)
+      dep_mtimes <- dep_mtimes[!is.na(dep_mtimes)]
+      dep_mtime <- if (length(dep_mtimes) > 0) max(dep_mtimes) else NA
+      required_cache_cols <- easycoloc_harmonized_gwas_output_cols()
+      cache_header <- if (cache_size_ok) {
+        tryCatch(names(data.table::fread(final_output_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
+      } else {
+        character()
+      }
+      cache_schema_ok <- identical(cache_header, required_cache_cols)
+      cache_ok <- cache_size_ok && cache_schema_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
+      if (cache_ok) {
+        log_message(glue("Found cached harmonized file: {final_output_file}"), verbose = verbose)
+        cached_dt <- data.table::fread(final_output_file)
+        return(easycoloc_standardize_harmonized_gwas(cached_dt, sample_size_n = sample_size_n))
+      }
+      if (!cache_schema_ok) {
+        log_message(glue("Cached file lacks canonical harmony schema and will be regenerated: {final_output_file}"), verbose = verbose)
+      } else {
+        log_message(glue("Cached file is outdated or empty: {final_output_file}"), verbose = verbose)
+      }
+    }
+  }
+
+  chunked_enabled <- if (is.null(chunked)) {
+    use_cache && nrow(sumstats_dt) >= as.integer(chunk_min_rows)
+  } else {
+    isTRUE(chunked)
+  }
+  if (chunked_enabled && use_cache) {
+    output_dt <- easycoloc_harmonize_table_chunked(
+      sumstats_dt,
+      ref_fasta = ref_fasta,
+      ref_vcf = ref_vcf,
+      ref_dbsnp = ref_dbsnp,
+      ref_alt_freq = ref_alt_freq,
+      source_build = source_build,
+      target_build = target_build,
+      liftover_chain = liftover_chain,
+      sample_size_n = sample_size_n,
+      final_output_file = final_output_file,
+      chunk_min_rows = chunk_min_rows,
+      chunk_parallel_jobs = chunk_parallel_jobs,
+      input_file = input_file,
+      dependency_signature = dependency_signature,
+      verbose = verbose
+    )
+    log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(output_dt)}"), verbose = verbose)
+    return(output_dt)
+  }
+
+  output_dt <- easycoloc_harmonize_table_full(
+    sumstats_dt,
+    ref_fasta = ref_fasta,
+    ref_vcf = ref_vcf,
+    ref_dbsnp = ref_dbsnp,
+    ref_alt_freq = ref_alt_freq,
+    source_build = source_build,
+    target_build = target_build,
+    liftover_chain = liftover_chain,
+    sample_size_n = sample_size_n,
+    verbose = verbose
+  )
   log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(output_dt)}"), verbose = verbose)
   if (use_cache) {
     data.table::fwrite(output_dt, final_output_file, sep = "\t", na = "NA", quote = FALSE)
@@ -1565,9 +1951,39 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
   tryCatch(
     {
       fwrite(list(variants), file = fn, col.names = FALSE)
-      keep_cmd <- if (!is.null(keep_file) && file.exists(keep_file)) paste0("--keep ", keep_file) else ""
-      cmd <- paste(plink_bin, "--bfile", bfile, "--extract", fn, keep_cmd, "--allow-extra-chr", "--r square --make-just-bim --out", fn, "--silent")
-      system(cmd, ignore.stdout = TRUE, ignore.stderr = TRUE)
+      plink_keep_file <- easycoloc_prepare_plink_keep_file(
+        keep_file,
+        bfile = bfile,
+        temp_dir = dirname(fn),
+        label = "ld",
+        verbose = FALSE
+      )
+      keep_cmd <- if (!is.null(plink_keep_file) && file.exists(plink_keep_file)) paste0("--keep ", shQuote(plink_keep_file)) else ""
+      plink_args <- c(
+        "--bfile", bfile,
+        "--extract", fn,
+        if (!is.null(plink_keep_file) && file.exists(plink_keep_file)) c("--keep", plink_keep_file) else character(),
+        "--allow-extra-chr",
+        "--r", "square",
+        "--make-just-bim",
+        "--out", fn,
+        "--silent"
+      )
+      if (exists("run_ld_plink", mode = "function")) {
+        status <- run_ld_plink(plink_bin, plink_args, label = glue("matrix LD ({length(variants)} variants)"))
+      } else {
+        status <- system2(
+          plink_bin,
+          args = plink_args,
+          stdout = FALSE,
+          stderr = FALSE,
+          timeout = 120L
+        )
+      }
+      if (!identical(as.integer(status), 0L)) {
+        message(glue("[LD] Matrix LD extraction skipped after PLINK status={as.integer(status)}"))
+        return(NULL)
+      }
       if (!file.exists(paste0(fn, ".ld"))) {
         return(NULL)
       }

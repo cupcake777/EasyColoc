@@ -23,6 +23,8 @@ test -f "${tmp_dir}/project/config/qtl.yml"
   --qtl "${tmp_dir}/project/config/qtl.yml" >/dev/null
 
 ./easycoloc help | grep "report-web" >/dev/null
+./easycoloc help | grep "harmonize" >/dev/null
+./easycoloc harmonize --help >/dev/null
 ./easycoloc report-web --help >/dev/null
 
 echo "[SMOKE] cli smoke test passed"
