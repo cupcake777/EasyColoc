@@ -84,7 +84,18 @@ After it finishes, open or inspect:
   --qtl /path/to/my_easycoloc_project/config/qtl.yml
 ```
 
-4. Run the analysis:
+4. Generate harmonized GWAS cache files:
+
+```bash
+./easycoloc harmonize \
+  --global /path/to/my_easycoloc_project/config/global.yml \
+  --gwas /path/to/my_easycoloc_project/config/gwas.yml \
+  --qtl /path/to/my_easycoloc_project/config/qtl.yml
+```
+
+This writes `*_harmonized.tsv` and `harmonized_gwas_manifest.tsv` under `global.yml -> harmonize_dir`.
+
+5. Run the analysis:
 
 ```bash
 ./easycoloc run --managed \
@@ -94,7 +105,7 @@ After it finishes, open or inspect:
   --output-dir /path/to/my_easycoloc_project/results
 ```
 
-5. Check the run and open the report:
+6. Check the run and open the report:
 
 ```bash
 ./easycoloc check /path/to/my_easycoloc_project/results
@@ -122,6 +133,7 @@ After it finishes, open or inspect:
 | `./easycoloc init TARGET_DIR` | create a new analysis project |
 | `./easycoloc refs --include-qtl-files` | list required reference and QTL files |
 | `./easycoloc doctor` | validate config paths, tools, and reference files |
+| `./easycoloc harmonize` | generate harmonized GWAS cache files only |
 | `./easycoloc run --managed` | run the full pipeline with managed logs and runtime state |
 | `./easycoloc status RESULTS_DIR` | summarize progress and output counts |
 | `./easycoloc monitor RESULTS_DIR` | print the latest runtime snapshot |
@@ -140,7 +152,8 @@ Before a real run, make sure these match the same genome build and population as
 | GWAS build | `gwas.yml -> datasets[].build` |
 | QTL build | `qtl.yml -> qtl_info.build` |
 | LD panel | `global.yml -> plink_hg19` or `global.yml -> plink_hg38` |
-| LD sample list | `global.yml -> plink_keep` |
+| LD sample list | `global.yml -> plink_keep`; PLINK `--keep` file, recommended two columns `FID IID`; one-column `IID` is accepted and converted at runtime |
+| LD PLINK timeout | `global.yml -> runtime.ld_plink_timeout`; max seconds for each PLINK LD matrix/plot extraction before skipping that LD call |
 | allele frequency | `global.yml -> 1kg_af` |
 | gene annotation | `global.yml -> gene_anno` |
 | recombination map | `global.yml -> recom` |
@@ -150,18 +163,3 @@ Do not mix `hg19` and `hg38` coordinates unless the input has been lifted over a
 ## More Documentation
 
 - [Tutorial](docs/TUTORIAL.md)
-
-## Maintainer Checks
-
-Before changing code, run at least:
-
-```bash
-Rscript tools/checks/check_parse.R
-bash examples/checks/check_cli.sh
-```
-
-If the local environment is fully configured, also run:
-
-```bash
-./easycoloc smoke
-```
