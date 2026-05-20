@@ -58,9 +58,16 @@ runtime:
   parallel_qtl_tasks: false
   precompute_locus_ld: false
   ld_plink_timeout: 120
+  execution_mode: "single"
+  shard_by: "locus"
+  shard_index: 1
+  shard_count: 1
+  task_state_flush_interval: 1
+  disk_ld_cache_dir: "temp/ld_cache"
 
 harmonization_settings:
   liftover_chain: "refs/liftover/hg19ToHg38.over.chain.gz"
+  compress_output: true
   chunked: true
   chunk_min_rows: 1000000
   chunk_parallel_jobs: 1

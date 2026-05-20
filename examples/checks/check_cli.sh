@@ -26,5 +26,6 @@ test -f "${tmp_dir}/project/config/qtl.yml"
 ./easycoloc help | grep "harmonize" >/dev/null
 ./easycoloc harmonize --help >/dev/null
 ./easycoloc report-web --help >/dev/null
+./easycoloc run --emit-slurm-array-template --shard-count 3 --output-dir "${tmp_dir}/project/results" | grep "#SBATCH --array=1-3" >/dev/null
 
 echo "[SMOKE] cli smoke test passed"

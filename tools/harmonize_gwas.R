@@ -75,18 +75,36 @@ rows <- list()
 for (ds in datasets) {
   source_build <- if (is.null(ds$build)) "19" else gsub("hg", "", ds$build)
   target_build <- gsub("hg", "", qtl_build)
-  output_file <- file.path(cfg_global$harmonize_dir, glue("{ds$id}_b{source_build}to{target_build}_harmonized.tsv"))
+  harmony_settings <- if (!is.null(cfg_global$harmonization_settings)) cfg_global$harmonization_settings else list()
+  compress_output <- if (!is.null(harmony_settings$compress_output)) isTRUE(harmony_settings$compress_output) else TRUE
+  output_file <- easycoloc_harmonized_cache_path(
+    save_dir = cfg_global$harmonize_dir,
+    dataset_id = ds$id,
+    source_build = source_build,
+    target_build = target_build,
+    compress_output = compress_output
+  )
+  cache_candidates <- easycoloc_harmonized_cache_candidates(
+    save_dir = cfg_global$harmonize_dir,
+    dataset_id = ds$id,
+    source_build = source_build,
+    target_build = target_build,
+    compress_output = compress_output
+  )
+  cache_exists_before <- any(file.exists(cache_candidates))
   message(glue("[HARMONIZE] Start {ds$id}"))
   harm_dt <- prepare_gwas_harmony(ds, qtl_build = qtl_build, n_threads = n_threads, prefer_cache = !isTRUE(opts$force))
+  existing_cache <- cache_candidates[file.exists(cache_candidates)]
+  actual_output_file <- if (length(existing_cache) > 0L) existing_cache[[1L]] else output_file
   rows[[length(rows) + 1L]] <- data.table(
     GWAS_ID = ds$id,
     input_file = ds$file,
-    output_file = output_file,
+    output_file = actual_output_file,
     rows = nrow(harm_dt),
     columns = paste(names(harm_dt), collapse = ","),
-    reused_cache = file.exists(output_file) && !isTRUE(opts$force)
+    reused_cache = cache_exists_before && !isTRUE(opts$force)
   )
-  message(glue("[HARMONIZE] Done {ds$id}: {nrow(harm_dt)} rows -> {output_file}"))
+  message(glue("[HARMONIZE] Done {ds$id}: {nrow(harm_dt)} rows -> {actual_output_file}"))
 }
 
 summary_dt <- data.table::rbindlist(rows, fill = TRUE)

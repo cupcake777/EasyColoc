@@ -28,17 +28,16 @@ assert_true(any(grepl("PP.H4 = 0.9463", out, fixed = TRUE)), "demo coloc output 
 
 results_dir <- file.path(project_dir, "results")
 all_results <- read.csv(file.path(results_dir, "all_colocalization_results.csv"))
-dedup_results <- read.csv(file.path(results_dir, "deduplicated_colocalization_results.csv"))
 sig_results <- read.csv(file.path(results_dir, "significant_colocalizations_PP4_0.7.csv"))
-sig_unique_results <- read.csv(file.path(results_dir, "significant_unique_trait_phenotype_PP4_0.7.csv"))
 
 assert_true(nrow(all_results) == 1, "demo all results should contain one coloc test")
-assert_true(nrow(dedup_results) == 1, "demo deduplicated results should contain one coloc test")
 assert_true(nrow(sig_results) == 1, "demo significant results should contain one PP4 >= 0.7 hit")
-assert_true(nrow(sig_unique_results) == 1, "demo unique significant results should contain one PP4 >= 0.7 hit")
+assert_true(!file.exists(file.path(results_dir, "deduplicated_colocalization_results.csv")), "demo should not write deduplicated results")
+assert_true(!file.exists(file.path(results_dir, "significant_unique_trait_phenotype_PP4_0.7.csv")), "demo should not write unique significant results")
 assert_true(isTRUE(all_results$n_snps[1] == 8), "demo coloc test should include all 8 SNPs")
 assert_true(isTRUE(all_results$PP4[1] > 0.7), "demo PP4 should exceed the configured significance threshold")
 assert_true(isTRUE(abs(all_results$PP4[1] - sig_results$PP4[1]) < 1e-8), "demo significant PP4 should match all results")
+assert_true(isTRUE(all_results$phenotype_locus_count[1] == 1), "demo should annotate one locus for the phenotype")
 
 report_json <- readLines(file.path(results_dir, "coloc_report_data.json"), warn = FALSE)
 assert_true(any(grepl('"total_tests": 1', report_json, fixed = TRUE)), "demo report summary should record one test")

@@ -93,7 +93,7 @@ After it finishes, open or inspect:
   --qtl /path/to/my_easycoloc_project/config/qtl.yml
 ```
 
-This writes `*_harmonized.tsv` and `harmonized_gwas_manifest.tsv` under `global.yml -> harmonize_dir`.
+This writes `*_harmonized.tsv.gz` and `harmonized_gwas_manifest.tsv` under `global.yml -> harmonize_dir`. Existing uncompressed `*_harmonized.tsv` caches are still readable.
 
 5. Run the analysis:
 
@@ -135,6 +135,10 @@ This writes `*_harmonized.tsv` and `harmonized_gwas_manifest.tsv` under `global.
 | `./easycoloc doctor` | validate config paths, tools, and reference files |
 | `./easycoloc harmonize` | generate harmonized GWAS cache files only |
 | `./easycoloc run --managed` | run the full pipeline with managed logs and runtime state |
+| `./easycoloc run --managed --shard-count N --shard-index I` | run one resumable locus shard for SLURM array-style execution |
+| `./easycoloc run --emit-slurm-array-template --shard-count N` | print a SLURM array template for shard execution |
+| `./easycoloc finalize RESULTS_DIR` | merge, report, manifest, and check outputs after shard runs |
+| `./easycoloc clean RESULTS_OR_PROJECT_DIR` | dry-run safe cleanup of stale summaries and run temp files |
 | `./easycoloc status RESULTS_DIR` | summarize progress and output counts |
 | `./easycoloc monitor RESULTS_DIR` | print the latest runtime snapshot |
 | `./easycoloc check RESULTS_DIR` | check whether a run completed cleanly |

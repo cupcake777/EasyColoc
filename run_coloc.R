@@ -201,6 +201,14 @@ write_task_events <- if (!is.null(cfg_runtime$write_task_events)) {
 } else {
   TRUE
 }
+task_state_flush_interval <- if (!is.null(cfg_runtime$task_state_flush_interval)) {
+  as.integer(cfg_runtime$task_state_flush_interval)
+} else {
+  1L
+}
+if (is.na(task_state_flush_interval) || task_state_flush_interval <= 0L) {
+  task_state_flush_interval <- 1L
+}
 ld_plink_timeout <- if (!is.null(cfg_runtime$ld_plink_timeout)) {
   as.integer(cfg_runtime$ld_plink_timeout)
 } else {
@@ -212,6 +220,79 @@ if (is.na(ld_plink_timeout) || ld_plink_timeout <= 0L) {
 options(easycoloc.ld_plink_timeout = ld_plink_timeout)
 message(glue("[INIT] PLINK LD timeout: {ld_plink_timeout}s"))
 
+disk_ld_cache_dir <- Sys.getenv("EASYCOLOC_DISK_LD_CACHE_DIR", unset = "")
+if (!nzchar(disk_ld_cache_dir) && !is.null(cfg_runtime$disk_ld_cache_dir)) {
+  disk_ld_cache_dir <- as.character(cfg_runtime$disk_ld_cache_dir)
+}
+if (nzchar(disk_ld_cache_dir)) {
+  options(easycoloc.disk_ld_cache_dir = normalizePath(path.expand(disk_ld_cache_dir), mustWork = FALSE))
+  message(glue("[INIT] Disk LD cache: {getOption('easycoloc.disk_ld_cache_dir')}"))
+}
+
+runtime_get_integer_env <- function(name, default = NA_integer_) {
+  value <- Sys.getenv(name, unset = "")
+  if (!nzchar(value)) {
+    return(default)
+  }
+  out <- suppressWarnings(as.integer(value))
+  if (is.na(out)) default else out
+}
+
+shard_mode <- Sys.getenv("EASYCOLOC_SHARD_MODE", unset = "")
+if (!nzchar(shard_mode) && !is.null(cfg_runtime$execution_mode)) {
+  shard_mode <- as.character(cfg_runtime$execution_mode)
+}
+shard_mode <- tolower(shard_mode)
+if (!shard_mode %in% c("", "single", "shard")) {
+  stop(glue("Unsupported runtime.execution_mode/EASYCOLOC_SHARD_MODE: {shard_mode}"), call. = FALSE)
+}
+shard_by <- Sys.getenv("EASYCOLOC_SHARD_BY", unset = "")
+if (!nzchar(shard_by) && !is.null(cfg_runtime$shard_by)) {
+  shard_by <- as.character(cfg_runtime$shard_by)
+}
+shard_by <- tolower(shard_by)
+if (!nzchar(shard_by)) {
+  shard_by <- "locus"
+}
+if (!shard_by %in% c("gwas", "locus")) {
+  stop(glue("Unsupported shard_by: {shard_by}"), call. = FALSE)
+}
+shard_index <- runtime_get_integer_env("EASYCOLOC_SHARD_INDEX", if (!is.null(cfg_runtime$shard_index)) as.integer(cfg_runtime$shard_index) else 1L)
+shard_count <- runtime_get_integer_env("EASYCOLOC_SHARD_COUNT", if (!is.null(cfg_runtime$shard_count)) as.integer(cfg_runtime$shard_count) else 1L)
+if (shard_mode == "shard" || shard_count > 1L) {
+  shard_mode <- "shard"
+  if (is.na(shard_index) || is.na(shard_count) || shard_index < 1L || shard_count < 1L || shard_index > shard_count) {
+    stop(glue("Invalid shard settings: index={shard_index}, count={shard_count}"), call. = FALSE)
+  }
+  message(glue("[INIT] Shard execution: by={shard_by} index={shard_index}/{shard_count}"))
+} else {
+  shard_mode <- "single"
+  shard_index <- 1L
+  shard_count <- 1L
+}
+
+should_process_shard_item <- function(item_index, shard_index, shard_count) {
+  ((as.integer(item_index) - 1L) %% as.integer(shard_count)) + 1L == as.integer(shard_index)
+}
+
+cleanup_plink_clump_files <- function(temp_assoc, temp_prefix, plink_keep_file = NULL) {
+  cleanup_files <- c(
+    temp_assoc,
+    paste0(temp_prefix, c(".clumped", ".log", ".nosex", ".hh"))
+  )
+  if (!is.null(plink_keep_file) &&
+    nzchar(plink_keep_file) &&
+    grepl("easycoloc_.*_keep_", basename(plink_keep_file)) &&
+    file.exists(plink_keep_file)) {
+    cleanup_files <- c(cleanup_files, plink_keep_file)
+  }
+  cleanup_files <- cleanup_files[file.exists(cleanup_files)]
+  if (length(cleanup_files) > 0) {
+    unlink(cleanup_files)
+  }
+  invisible(cleanup_files)
+}
+
 base_out_dir <- normalizePath(cfg_global$output_dir, mustWork = FALSE)
 dir_abf <- file.path(base_out_dir, "abf")
 dir_susie <- file.path(base_out_dir, "susie")
@@ -219,11 +300,17 @@ dir_plots <- file.path(base_out_dir, "plots")
 dir_rds <- file.path(base_out_dir, "rds")
 for (d in c(base_out_dir, dir_abf, dir_susie, dir_plots, dir_rds)) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
 
+runtime_tracker_output_dir <- if (identical(shard_mode, "shard")) {
+  file.path(base_out_dir, "runtime", "shards", glue("{shard_by}_{shard_index}of{shard_count}"))
+} else {
+  base_out_dir
+}
+
 runtime_fingerprint <- compute_runtime_config_fingerprint(
   c(cfg_bundle$paths$global, cfg_bundle$paths$gwas, cfg_bundle$paths$qtl, "run_coloc.R")
 )
 initialize_runtime_tracker(
-  output_dir = base_out_dir,
+  output_dir = runtime_tracker_output_dir,
   enabled = runtime_enabled,
   config_fingerprint = runtime_fingerprint
 )
@@ -237,7 +324,15 @@ on.exit(clear_active_run(), add = TRUE)
 append_runtime_event(
   stage = "init",
   message_text = "EasyColoc pipeline initialized",
-  extras = list(output_dir = base_out_dir, random_seed = global_seed)
+  extras = list(
+    output_dir = base_out_dir,
+    runtime_dir = runtime_tracker_output_dir,
+    random_seed = global_seed,
+    shard_mode = shard_mode,
+    shard_by = shard_by,
+    shard_index = shard_index,
+    shard_count = shard_count
+  )
 )
 write_runtime_heartbeat(
   stage = "init",
@@ -280,8 +375,16 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
   message(glue("        Using PLINK clumping with: {basename(plink_bfile)}"))
   if (!dir.exists(temp_dir)) dir.create(temp_dir, recursive = TRUE)
   ds_id <- if (is.null(dataset_id)) "unknown" else dataset_id
-  temp_assoc <- file.path(temp_dir, glue("clump_input_{ds_id}.qassoc"))
-  temp_prefix <- file.path(temp_dir, glue("clump_output_{ds_id}"))
+  safe_ds_id <- sanitize_filename(ds_id)
+  temp_prefix <- tempfile(pattern = glue("clump_output_{safe_ds_id}_"), tmpdir = temp_dir)
+  temp_assoc <- paste0(temp_prefix, ".qassoc")
+  plink_keep_file <- NULL
+  cleanup_clump_on_exit <- FALSE
+  on.exit({
+    if (isTRUE(cleanup_clump_on_exit)) {
+      cleanup_plink_clump_files(temp_assoc, temp_prefix, plink_keep_file)
+    }
+  }, add = TRUE)
 
   ref_panel <- load_plink_bim_index(plink_bfile)
   if (is.null(ref_panel) || nrow(ref_panel) == 0) {
@@ -380,6 +483,7 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
   clump_res <- fread(clump_file)
   if (nrow(clump_res) == 0) {
     warning(glue("[LOCUS] PLINK produced 0 clumps for {ds_id} after rsID translation"))
+    cleanup_clump_on_exit <- TRUE
     return(list())
   }
 
@@ -400,6 +504,7 @@ identify_loci <- function(sumstats_dt, p_col, snp_col, chrom_col, pos_col, plink
     )
   }
 
+  cleanup_clump_on_exit <- TRUE
   Filter(Negate(is.null), loci)
 }
 
@@ -442,12 +547,28 @@ run_pipeline <- function() {
   write_runtime_heartbeat(
     stage = "pipeline_start",
     message_text = "Main GWAS loop started",
-    counters = list(total_gwas = total_gwas, total_qtl = nrow(qtl_meta), n_cores = n_cores)
+    counters = list(
+      total_gwas = total_gwas,
+      total_qtl = nrow(qtl_meta),
+      n_cores = n_cores,
+      shard_index = shard_index,
+      shard_count = shard_count
+    )
   )
-  pre_harmonize_gwas_caches(cfg_gwas$datasets, qtl_build = qtl_build, n_cores = n_cores)
+  if (identical(shard_mode, "shard")) {
+    message("[HARMONY] Shard mode: skipping shared pre-harmonization prefetch to avoid concurrent cache writes")
+  } else {
+    pre_harmonize_gwas_caches(cfg_gwas$datasets, qtl_build = qtl_build, n_cores = n_cores)
+  }
 
   for (gwas_idx in seq_along(cfg_gwas$datasets)) {
     gwas_cfg <- cfg_gwas$datasets[[gwas_idx]]
+    if (identical(shard_mode, "shard") &&
+      identical(shard_by, "gwas") &&
+      !should_process_shard_item(gwas_idx, shard_index, shard_count)) {
+      message(glue("[SHARD] Skipping GWAS {gwas_cfg$id} ({gwas_idx}/{total_gwas}) for shard {shard_index}/{shard_count}"))
+      next
+    }
     separator <- strrep("=", 50)
     message(glue("\n{separator}\nProcessing GWAS Dataset: {gwas_cfg$name}\n{separator}"))
     append_runtime_event(
@@ -580,6 +701,12 @@ run_pipeline <- function() {
           } else {
             for (locus_idx in seq_along(loci_list)) {
               locus <- loci_list[[locus_idx]]
+              if (identical(shard_mode, "shard") &&
+                identical(shard_by, "locus") &&
+                !should_process_shard_item(locus_idx, shard_index, shard_count)) {
+                message(glue("[SHARD] Skipping locus {locus_idx}/{length(loci_list)} for shard {shard_index}/{shard_count}"))
+                next
+              }
               message(glue("\n>>> Locus: {locus$snp} (hg38 chr{locus$chrom}:{locus$pos})"))
               query_chrom <- locus$chrom
               query_pos <- locus$pos
@@ -1008,7 +1135,9 @@ run_pipeline <- function() {
                     )
                   }
                 }
-                persist_runtime_task_state()
+                if (runtime_should_flush_task_state(task_state_flush_interval)) {
+                  persist_runtime_task_state()
+                }
               }
 
               write_runtime_heartbeat(
@@ -1043,6 +1172,35 @@ run_pipeline <- function() {
         )
       }
     )
+  }
+
+  persist_runtime_task_state()
+
+  if (identical(shard_mode, "shard")) {
+    if (isTRUE(pipeline_has_failures)) {
+      append_runtime_event(
+        level = "ERROR",
+        stage = "pipeline_failed",
+        message_text = "EasyColoc shard finished with failures"
+      )
+      write_runtime_heartbeat(
+        stage = "pipeline_failed",
+        message_text = "EasyColoc shard finished with failures",
+        counters = list(total_gwas = total_gwas, shard_index = shard_index, shard_count = shard_count)
+      )
+      stop("EasyColoc shard finished with failures")
+    }
+    append_runtime_event(
+      stage = "shard_complete",
+      message_text = "EasyColoc shard finished; run ./easycoloc finalize after all shards complete",
+      extras = list(shard_by = shard_by, shard_index = shard_index, shard_count = shard_count)
+    )
+    write_runtime_heartbeat(
+      stage = "shard_complete",
+      message_text = "EasyColoc shard finished",
+      counters = list(total_gwas = total_gwas, shard_index = shard_index, shard_count = shard_count)
+    )
+    return(invisible(TRUE))
   }
 
   message("\n==============================================================")

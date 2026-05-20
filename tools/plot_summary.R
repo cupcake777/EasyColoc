@@ -168,12 +168,8 @@ Examples:
 load_results <- function(results_dir) {
     abf_dir <- file.path(results_dir, "abf")
     
-    dedup_file <- file.path(results_dir, "deduplicated_colocalization_results.csv")
     merged_file <- file.path(results_dir, "all_colocalization_results.csv")
-    if (file.exists(dedup_file)) {
-        message("[INFO] Loading deduplicated results: ", dedup_file)
-        dt <- fread(dedup_file)
-    } else if (file.exists(merged_file)) {
+    if (file.exists(merged_file)) {
         message("[INFO] Loading merged results: ", merged_file)
         dt <- fread(merged_file)
     } else {

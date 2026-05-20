@@ -30,12 +30,7 @@ report_value <- function(row, primary, fallback = NULL, default = NA_character_)
 }
 
 read_report_results <- function(results_dir) {
-  dedup_file <- file.path(results_dir, "deduplicated_colocalization_results.csv")
   merged_file <- file.path(results_dir, "all_colocalization_results.csv")
-
-  if (file.exists(dedup_file)) {
-    return(fread(dedup_file))
-  }
 
   if (file.exists(merged_file)) {
     return(fread(merged_file))
@@ -132,7 +127,9 @@ get_summary_stats <- function(results) {
     character(0)
   }
 
-  lead_locus_count <- if ("lead_locus_count" %in% names(results)) {
+  phenotype_locus_count <- if ("phenotype_locus_count" %in% names(results)) {
+    results$phenotype_locus_count
+  } else if ("lead_locus_count" %in% names(results)) {
     results$lead_locus_count
   } else {
     rep(NA_integer_, nrow(results))
@@ -150,8 +147,8 @@ get_summary_stats <- function(results) {
     mean_n_snps = round(mean(results$n_snps, na.rm = TRUE), 1),
     unique_genes = length(unique(gene_labels)),
     unique_loci = length(unique(results$Locus)),
-    duplicated_lead_groups = sum(!is.na(lead_locus_count) & lead_locus_count > 1),
-    max_lead_locus_count = if (all(is.na(lead_locus_count))) NA_integer_ else max(lead_locus_count, na.rm = TRUE)
+    multi_locus_phenotype_rows = sum(!is.na(phenotype_locus_count) & phenotype_locus_count > 1),
+    max_phenotype_locus_count = if (all(is.na(phenotype_locus_count))) NA_integer_ else max(phenotype_locus_count, na.rm = TRUE)
   )
 }
 
@@ -377,6 +374,7 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
             <th>PP3</th>
             <th>PP.H0</th>
             <th>n_snps</th>
+            <th>Phenotype Loci</th>
             <th>Evidence</th>
           </tr>
         </thead>
@@ -486,6 +484,7 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
       pp3 <- suppressWarnings(as.numeric(report_value(row_list, "PP3", default = NA_real_)))
       pp0 <- suppressWarnings(as.numeric(report_value(row_list, "PP.H0.abf", default = NA_real_)))
       n_snps <- suppressWarnings(as.numeric(report_value(row_list, "n_snps", default = NA_real_)))
+      phenotype_locus_count <- suppressWarnings(as.integer(report_value(row_list, "phenotype_locus_count", fallback = "lead_locus_count", default = NA_integer_)))
       locus <- report_value(row_list, "Locus", default = "")
       gene_label <- report_value(row_list, "Gene", fallback = "Phenotype", default = "")
       badge_class <- if(pp4 >= 0.8) "pp4-strong" else if(pp4 >= 0.5) "pp4-suggestive" else "pp4-weak"
@@ -498,6 +497,7 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
             <td>%.3f</td>
             <td>%d</td>
             <td>%s</td>
+            <td>%s</td>
           </tr>',
         locus,
         gene_label,
@@ -506,6 +506,7 @@ build_report_html <- function(all_results, susie_files, project_name, timestamp)
         ifelse(is.na(pp3), NaN, pp3),
         ifelse(is.na(pp0), NaN, pp0),
         ifelse(is.na(n_snps), 0L, as.integer(round(n_snps))),
+        ifelse(is.na(phenotype_locus_count), "", as.character(phenotype_locus_count)),
         ifelse(pp4 >= 0.8, "Strong", ifelse(pp4 >= 0.5, "Suggestive", "Weak"))
       )
     }), collapse = "\n"),

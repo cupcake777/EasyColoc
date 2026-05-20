@@ -13,7 +13,8 @@ assert_true <- function(cond, msg) {
 
 tmp_dir <- tempfile(pattern = "easycoloc_chunked_harmony_")
 dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
-out_file <- file.path(tmp_dir, "SMOKE_b38to38_harmonized.tsv")
+out_file <- file.path(tmp_dir, "SMOKE_b38to38_harmonized.tsv.gz")
+input_file <- file.path(tmp_dir, "input.tsv")
 
 input_dt <- data.table(
   SNPID = c("rs1", "rs2", "rs3", "rs4"),
@@ -27,6 +28,7 @@ input_dt <- data.table(
   P = c(0.05, 0.01, 0.001, 0.2),
   N = c(100, 100, 100, 100)
 )
+data.table::fwrite(input_dt, input_file, sep = "\t", na = "NA", quote = FALSE)
 
 res <- run_easycoloc_harmonization(
   input_dt,
@@ -37,6 +39,7 @@ res <- run_easycoloc_harmonization(
   target_build = "38",
   save_dir = tmp_dir,
   dataset_id = "SMOKE",
+  input_file = input_file,
   sample_size_n = 100,
   chunked = TRUE,
   chunk_min_rows = 1L,
@@ -64,6 +67,7 @@ res_cached <- run_easycoloc_harmonization(
   target_build = "38",
   save_dir = tmp_dir,
   dataset_id = "SMOKE",
+  input_file = input_file,
   sample_size_n = 100,
   chunked = TRUE,
   chunk_min_rows = 1L,
@@ -73,6 +77,29 @@ res_cached <- run_easycoloc_harmonization(
 mtime_after <- file.info(file.path(part_dir, "chr1.tsv"))$mtime
 assert_true(identical(mtime_before, mtime_after), "completed part should be reused")
 assert_true(nrow(res_cached) == 4L, "cached output row count mismatch")
+
+unlink(out_file)
+legacy_out_file <- file.path(tmp_dir, "SMOKE_b38to38_harmonized.tsv")
+data.table::fwrite(res, legacy_out_file, sep = "\t", na = "NA", quote = FALSE)
+Sys.sleep(1)
+res_legacy_cached <- run_easycoloc_harmonization(
+  input_dt,
+  ref_fasta = file.path(tmp_dir, "missing.fa"),
+  ref_vcf = NULL,
+  ref_dbsnp = NULL,
+  source_build = "38",
+  target_build = "38",
+  save_dir = tmp_dir,
+  dataset_id = "SMOKE",
+  input_file = input_file,
+  sample_size_n = 100,
+  chunked = TRUE,
+  chunk_min_rows = 1L,
+  chunk_parallel_jobs = 2L,
+  verbose = FALSE
+)
+assert_true(nrow(res_legacy_cached) == 4L, "legacy tsv cache fallback row count mismatch")
+assert_true(!file.exists(out_file), "legacy cache fallback should not rewrite preferred gz cache")
 
 cat("[SMOKE] chunked harmonization smoke test passed\n")
 cat("[SMOKE] output dir:", tmp_dir, "\n")

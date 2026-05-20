@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 }
 
 .runtime_tracker <- new.env(parent = emptyenv())
+.runtime_state_flush_counter <- 0L
 
 runtime_is_enabled <- function() {
   isTRUE(get0("enabled", envir = .runtime_tracker, ifnotfound = FALSE))
@@ -113,6 +114,15 @@ persist_runtime_task_state <- function() {
   invisible(TRUE)
 }
 
+runtime_should_flush_task_state <- function(interval = 1L) {
+  interval <- suppressWarnings(as.integer(interval))
+  if (is.na(interval) || interval <= 1L) {
+    return(TRUE)
+  }
+  .runtime_state_flush_counter <<- .runtime_state_flush_counter + 1L
+  .runtime_state_flush_counter %% interval == 0L
+}
+
 initialize_runtime_tracker <- function(output_dir,
                                        enabled = TRUE,
                                        config_fingerprint = NA_character_) {
@@ -129,6 +139,7 @@ initialize_runtime_tracker <- function(output_dir,
   assign("enabled", isTRUE(enabled), envir = .runtime_tracker)
   assign("config_fingerprint", runtime_scalar_chr(config_fingerprint), envir = .runtime_tracker)
   assign("paths", paths, envir = .runtime_tracker)
+  .runtime_state_flush_counter <<- 0L
 
   if (!isTRUE(enabled)) {
     assign("task_state", runtime_empty_task_state(), envir = .runtime_tracker)

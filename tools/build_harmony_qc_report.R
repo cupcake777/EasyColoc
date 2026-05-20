@@ -168,7 +168,7 @@ check_dbsnp_position_concordance <- function(dt, dbsnp_vcf, build, dataset) {
 }
 
 qc_one_file <- function(file) {
-  dataset <- sub("_b[0-9]+to[0-9]+_harmonized\\.tsv$", "", basename(file))
+  dataset <- sub("_b[0-9]+to[0-9]+_harmonized\\.tsv(\\.gz)?$", "", basename(file))
   ds <- dataset_by_id[[dataset]]
   header <- names(fread(file, nrows = 0, showProgress = FALSE))
   required <- easycoloc_harmonized_gwas_output_cols()
@@ -227,8 +227,11 @@ qc_one_file <- function(file) {
   list(summary = summary, flags = flags, dbsnp_mismatches = dbsnp_qc$mismatches)
 }
 
-files <- sort(Sys.glob(file.path(harmony_dir, "*_harmonized.tsv")))
-if (length(files) == 0) stop(glue("No harmonized TSV files found in {harmony_dir}"))
+files <- sort(unique(c(
+  Sys.glob(file.path(harmony_dir, "*_harmonized.tsv.gz")),
+  Sys.glob(file.path(harmony_dir, "*_harmonized.tsv"))
+)))
+if (length(files) == 0) stop(glue("No harmonized TSV/TSV.GZ files found in {harmony_dir}"))
 
 qc <- lapply(files, qc_one_file)
 summary_dt <- rbindlist(lapply(qc, `[[`, "summary"), fill = TRUE)

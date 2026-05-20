@@ -90,6 +90,86 @@ ld_cache_entry_key <- function(variants) {
   paste(sort(unique(as.character(variants))), collapse = "|")
 }
 
+ld_disk_cache_dir <- function() {
+  cache_dir <- getOption("easycoloc.disk_ld_cache_dir", NULL)
+  if (is.null(cache_dir) || length(cache_dir) == 0 || is.na(cache_dir[1]) || !nzchar(cache_dir[1])) {
+    return(NULL)
+  }
+  normalizePath(path.expand(as.character(cache_dir[1])), mustWork = FALSE)
+}
+
+ld_reference_signature <- function(path) {
+  path <- normalizePath(path, mustWork = FALSE)
+  if (!file.exists(path)) {
+    return(paste(path, "missing", sep = "::"))
+  }
+  info <- file.info(path)
+  paste(path, info$size, as.numeric(info$mtime), sep = "::")
+}
+
+ld_disk_cache_key <- function(variants, bfile, keep_file = NULL) {
+  variants <- sort(unique(as.character(variants)))
+  ref_paths <- c(paste0(bfile, ".bed"), paste0(bfile, ".bim"), paste0(bfile, ".fam"))
+  ref_sig <- paste(vapply(ref_paths, ld_reference_signature, character(1)), collapse = "||")
+  keep_sig <- if (is.null(keep_file) || !nzchar(keep_file)) {
+    "NO_KEEP"
+  } else {
+    ld_reference_signature(keep_file)
+  }
+  digest_src <- paste(
+    normalizePath(bfile, mustWork = FALSE),
+    keep_sig,
+    ref_sig,
+    paste(variants, collapse = "|"),
+    sep = "\n"
+  )
+  key_file <- tempfile("easycoloc_ld_key_")
+  on.exit(unlink(key_file), add = TRUE)
+  writeLines(digest_src, key_file, useBytes = TRUE)
+  unname(tools::md5sum(key_file))
+}
+
+ld_disk_cache_path <- function(variants, bfile, keep_file = NULL) {
+  cache_dir <- ld_disk_cache_dir()
+  if (is.null(cache_dir)) {
+    return(NULL)
+  }
+  file.path(cache_dir, paste0(ld_disk_cache_key(variants, bfile, keep_file), ".rds"))
+}
+
+ld_disk_cache_read <- function(variants, bfile, keep_file = NULL) {
+  cache_path <- ld_disk_cache_path(variants, bfile, keep_file)
+  if (is.null(cache_path) || !file.exists(cache_path)) {
+    return(NULL)
+  }
+  cached <- tryCatch(readRDS(cache_path), error = function(e) NULL)
+  if (is.null(cached) || is.null(cached$R)) {
+    return(NULL)
+  }
+  ld_cache_store(variants, bfile, keep_file = keep_file, ld_res = cached)
+  cached
+}
+
+ld_disk_cache_write <- function(variants, bfile, keep_file = NULL, ld_res) {
+  cache_path <- ld_disk_cache_path(variants, bfile, keep_file)
+  if (is.null(cache_path) || is.null(ld_res) || is.null(ld_res$R)) {
+    return(invisible(FALSE))
+  }
+  dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE)
+  tmp_path <- paste0(cache_path, ".tmp.", Sys.getpid())
+  ok <- tryCatch(
+    {
+      saveRDS(ld_res, tmp_path)
+      file.rename(tmp_path, cache_path)
+    },
+    error = function(e) FALSE
+  )
+  if (file.exists(tmp_path)) {
+    unlink(tmp_path)
+  }
+  invisible(isTRUE(ok))
+}
+
 ld_cache_lookup <- function(variants, bfile, keep_file = NULL) {
   req_snps <- sort(unique(as.character(variants)))
   if (length(req_snps) == 0) {
@@ -1002,6 +1082,47 @@ easycoloc_harmony_part_dir <- function(final_output_file) {
   paste0(final_output_file, ".parts")
 }
 
+easycoloc_harmony_compress_output <- function(compress_output = NULL) {
+  if (is.null(compress_output)) return(TRUE)
+  isTRUE(compress_output)
+}
+
+easycoloc_harmonized_cache_path <- function(save_dir,
+                                            dataset_id,
+                                            source_build,
+                                            target_build,
+                                            compress_output = NULL) {
+  ext <- if (easycoloc_harmony_compress_output(compress_output)) ".tsv.gz" else ".tsv"
+  file.path(save_dir, glue("{dataset_id}_b{source_build}to{target_build}_harmonized{ext}"))
+}
+
+easycoloc_harmonized_cache_candidates <- function(save_dir,
+                                                  dataset_id,
+                                                  source_build,
+                                                  target_build,
+                                                  compress_output = NULL) {
+  preferred <- easycoloc_harmonized_cache_path(
+    save_dir = save_dir,
+    dataset_id = dataset_id,
+    source_build = source_build,
+    target_build = target_build,
+    compress_output = compress_output
+  )
+  legacy <- easycoloc_harmonized_cache_path(
+    save_dir = save_dir,
+    dataset_id = dataset_id,
+    source_build = source_build,
+    target_build = target_build,
+    compress_output = FALSE
+  )
+  unique(c(preferred, legacy))
+}
+
+easycoloc_write_harmonized_cache <- function(dt, path) {
+  compress <- if (grepl("\\.gz$", path, ignore.case = TRUE)) "gzip" else "none"
+  data.table::fwrite(dt, path, sep = "\t", na = "NA", quote = FALSE, compress = compress)
+}
+
 easycoloc_file_signature <- function(path) {
   if (is.null(path) || !nzchar(path) || !file.exists(path)) {
     return("missing")
@@ -1220,7 +1341,7 @@ easycoloc_harmonize_table_chunked <- function(sumstats_dt,
   log_message(glue("[EasyColoc Harmonize] Combining {length(valid_part_files)} chunk files"), verbose = verbose)
   output_dt <- data.table::rbindlist(lapply(valid_part_files, data.table::fread, showProgress = FALSE), use.names = TRUE)
   output_dt <- easycoloc_prepare_harmonized_gwas_output(output_dt, sample_size_n = sample_size_n)
-  data.table::fwrite(output_dt, final_output_file, sep = "\t", na = "NA", quote = FALSE)
+  easycoloc_write_harmonized_cache(output_dt, final_output_file)
   log_message(glue("Saved result to: {final_output_file}"), verbose = verbose)
   output_dt
 }
@@ -1241,7 +1362,9 @@ run_easycoloc_harmonization <- function(sumstats_dt,
                                         sample_size_n = NULL,
                                         chunked = NULL,
                                         chunk_min_rows = 1000000L,
-                                        chunk_parallel_jobs = 1L) {
+                                        chunk_parallel_jobs = 1L,
+                                        compress_output = TRUE,
+                                        reuse_cache = TRUE) {
   log_message <- function(..., verbose = TRUE) {
     if (isTRUE(verbose)) message(...)
   }
@@ -1262,34 +1385,56 @@ run_easycoloc_harmonization <- function(sumstats_dt,
   final_output_file <- NULL
   if (use_cache) {
     if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
-    final_output_file <- file.path(save_dir, glue("{dataset_id}_b{source_build}to{target_build}_harmonized.tsv"))
-    if (file.exists(final_output_file)) {
-      cache_info <- file.info(final_output_file)
-      cache_mtime <- cache_info$mtime
-      cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
-      ref_mtime <- if (file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
-      input_mtime <- if (!is.null(source_file) && file.exists(source_file)) file.info(source_file)$mtime else NA
-      dep_mtimes <- c(ref_mtime, input_mtime)
-      dep_mtimes <- dep_mtimes[!is.na(dep_mtimes)]
-      dep_mtime <- if (length(dep_mtimes) > 0) max(dep_mtimes) else NA
-      required_cache_cols <- easycoloc_harmonized_gwas_output_cols()
-      cache_header <- if (cache_size_ok) {
-        tryCatch(names(data.table::fread(final_output_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
-      } else {
-        character()
+    final_output_file <- easycoloc_harmonized_cache_path(
+      save_dir = save_dir,
+      dataset_id = dataset_id,
+      source_build = source_build,
+      target_build = target_build,
+      compress_output = compress_output
+    )
+    cache_candidates <- easycoloc_harmonized_cache_candidates(
+      save_dir = save_dir,
+      dataset_id = dataset_id,
+      source_build = source_build,
+      target_build = target_build,
+      compress_output = compress_output
+    )
+    existing_cache <- cache_candidates[file.exists(cache_candidates)]
+    if (isTRUE(reuse_cache) && length(existing_cache) > 0L) {
+      valid_cache_file <- NULL
+      for (cache_file in existing_cache) {
+        cache_info <- file.info(cache_file)
+        cache_mtime <- cache_info$mtime
+        cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
+        ref_mtime <- if (file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
+        input_mtime <- if (!is.null(source_file) && file.exists(source_file)) file.info(source_file)$mtime else NA
+        dep_mtimes <- c(ref_mtime, input_mtime)
+        dep_mtimes <- dep_mtimes[!is.na(dep_mtimes)]
+        dep_mtime <- if (length(dep_mtimes) > 0) max(dep_mtimes) else NA
+        required_cache_cols <- easycoloc_harmonized_gwas_output_cols()
+        cache_header <- if (cache_size_ok) {
+          tryCatch(names(data.table::fread(cache_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
+        } else {
+          character()
+        }
+        cache_schema_ok <- identical(cache_header, required_cache_cols)
+        cache_ok <- cache_size_ok && cache_schema_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
+        if (cache_ok) {
+          valid_cache_file <- cache_file
+          break
+        }
+        if (!cache_schema_ok) {
+          log_message(glue("Cached file lacks canonical harmony schema: {cache_file}"), verbose = verbose)
+        } else {
+          log_message(glue("Cached file is outdated or empty: {cache_file}"), verbose = verbose)
+        }
       }
-      cache_schema_ok <- identical(cache_header, required_cache_cols)
-      cache_ok <- cache_size_ok && cache_schema_ok && !is.na(cache_mtime) && !is.na(dep_mtime) && cache_mtime >= dep_mtime
-      if (cache_ok) {
-        log_message(glue("Found cached harmonized file: {final_output_file}"), verbose = verbose)
-        cached_dt <- data.table::fread(final_output_file)
+      if (!is.null(valid_cache_file)) {
+        log_message(glue("Found cached harmonized file: {valid_cache_file}"), verbose = verbose)
+        cached_dt <- data.table::fread(valid_cache_file)
         return(easycoloc_standardize_harmonized_gwas(cached_dt, sample_size_n = sample_size_n))
       }
-      if (!cache_schema_ok) {
-        log_message(glue("Cached file lacks canonical harmony schema and will be regenerated: {final_output_file}"), verbose = verbose)
-      } else {
-        log_message(glue("Cached file is outdated or empty: {final_output_file}"), verbose = verbose)
-      }
+      log_message(glue("No valid cached harmonized file found; regenerating: {final_output_file}"), verbose = verbose)
     }
   }
 
@@ -1334,7 +1479,7 @@ run_easycoloc_harmonization <- function(sumstats_dt,
   )
   log_message(glue("Processing complete. Input SNPs: {nrow(sumstats_dt)} -> Output SNPs: {nrow(output_dt)}"), verbose = verbose)
   if (use_cache) {
-    data.table::fwrite(output_dt, final_output_file, sep = "\t", na = "NA", quote = FALSE)
+    easycoloc_write_harmonized_cache(output_dt, final_output_file)
     log_message(glue("Saved result to: {final_output_file}"), verbose = verbose)
   }
   output_dt
@@ -1946,6 +2091,10 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
   if (!is.null(cached_res)) {
     return(cached_res)
   }
+  cached_res <- ld_disk_cache_read(variants, bfile, keep_file = keep_file)
+  if (!is.null(cached_res)) {
+    return(cached_res)
+  }
   fn <- tempfile()
   on.exit(unlink(paste0(fn, "*")), add = TRUE)
   tryCatch(
@@ -1993,6 +2142,7 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
       rownames(ld_mat) <- bim$SNP
       ld_res <- list(R = ld_mat, snp_info = bim)
       ld_cache_store(variants, bfile, keep_file = keep_file, ld_res = ld_res)
+      ld_disk_cache_write(variants, bfile, keep_file = keep_file, ld_res = ld_res)
       return(ld_res)
     },
     error = function(e) {
@@ -2001,37 +2151,24 @@ get_ld_matrix <- function(variants, bfile, plink_bin, keep_file = NULL) {
   )
 }
 
-deduplicate_coloc_results <- function(results_dt) {
+annotate_coloc_locus_capture <- function(results_dt) {
   if (is.null(results_dt) || nrow(results_dt) == 0) {
     return(copy(results_dt))
   }
 
   dt <- as.data.table(copy(results_dt))
-  dt[, row_id___ := seq_len(.N)]
-
-  dedup <- dt[
+  if (!all(c("GWAS_ID", "QTL_ID", "Phenotype", "Locus") %in% names(dt))) {
+    return(dt)
+  }
+  dt[
     ,
-    {
-      best_idx <- which.max(PP4)
-      best_row <- .SD[best_idx]
-      lead_locus_count <- uniqueN(.SD$Locus)
-      loci_collapsed <- paste(sort(unique(.SD$Locus)), collapse = ";")
-      supporting_source_files <- if ("source_file" %in% names(.SD)) {
-        paste(sort(unique(.SD$source_file)), collapse = ";")
-      } else {
-        NA_character_
-      }
-      best_row[, lead_locus_count := lead_locus_count]
-      best_row[, loci_collapsed := loci_collapsed]
-      best_row[, supporting_source_files := supporting_source_files]
-      best_row
-    },
+    `:=`(
+      phenotype_locus_count = uniqueN(Locus),
+      phenotype_loci = paste(sort(unique(as.character(Locus))), collapse = ";")
+    ),
     by = .(GWAS_ID, QTL_ID, Phenotype)
   ]
-
-  dedup[, row_id___ := NULL]
-  setorder(dedup, -PP4, GWAS_ID, QTL_ID, Phenotype)
-  dedup
+  dt
 }
 
 # ------------------------------------------------------------------------------
@@ -2072,22 +2209,40 @@ merge_all_results <- function(output_dir,
     return(invisible(NULL))
   }
 
-  # Sort by PP4 (descending)
+  all_results <- annotate_coloc_locus_capture(all_results)
   all_results <- all_results[order(-PP4)]
-  dedup_results <- deduplicate_coloc_results(all_results)
 
   # Filter by PP4 threshold
   sig_results <- all_results[PP4 >= pp4_threshold]
-  sig_dedup_results <- dedup_results[PP4 >= pp4_threshold]
 
   # Save merged results
   merged_file <- file.path(output_dir, "all_colocalization_results.csv")
   fwrite(all_results, merged_file)
   message(glue("[SUM] Saved merged results: {basename(merged_file)} ({nrow(all_results)} rows)"))
 
-  dedup_file <- file.path(output_dir, "deduplicated_colocalization_results.csv")
-  fwrite(dedup_results, dedup_file)
-  message(glue("[SUM] Saved deduplicated results: {basename(dedup_file)} ({nrow(dedup_results)} rows)"))
+  stale_dedup_files <- c(
+    file.path(output_dir, "deduplicated_colocalization_results.csv"),
+    list.files(
+      output_dir,
+      pattern = "^significant_unique_trait_phenotype_PP4_.*\\.csv$",
+      full.names = TRUE
+    )
+  )
+  stale_dedup_files <- stale_dedup_files[file.exists(stale_dedup_files)]
+  if (length(stale_dedup_files) > 0) {
+    unlink(stale_dedup_files)
+    message(glue("[SUM] Removed stale deduplicated output file(s): {length(stale_dedup_files)}"))
+  }
+
+  stale_significant_files <- list.files(
+    output_dir,
+    pattern = "^significant_colocalizations_PP4_.*\\.csv$",
+    full.names = TRUE
+  )
+  if (length(stale_significant_files) > 0) {
+    unlink(stale_significant_files)
+    message(glue("[SUM] Removed stale significant output file(s): {length(stale_significant_files)}"))
+  }
 
   # Save significant results
   if (nrow(sig_results) > 0) {
@@ -2096,14 +2251,6 @@ merge_all_results <- function(output_dir,
     message(glue("[SUM] Saved significant results (PP4 >= {pp4_threshold}): {basename(sig_file)} ({nrow(sig_results)} rows)"))
   } else {
     message(glue("[SUM] No significant results found with PP4 >= {pp4_threshold}"))
-  }
-
-  if (nrow(sig_dedup_results) > 0) {
-    sig_dedup_file <- file.path(output_dir, glue("significant_unique_trait_phenotype_PP4_{pp4_threshold}.csv"))
-    fwrite(sig_dedup_results, sig_dedup_file)
-    message(glue("[SUM] Saved deduplicated significant results (PP4 >= {pp4_threshold}): {basename(sig_dedup_file)} ({nrow(sig_dedup_results)} rows)"))
-  } else {
-    message(glue("[SUM] No deduplicated significant results found with PP4 >= {pp4_threshold}"))
   }
 
   # Merge SuSiE results if requested
@@ -2140,8 +2287,8 @@ merge_all_results <- function(output_dir,
     summary_stats <- list(
       total_tests = nrow(all_results),
       significant_colocalizations = nrow(sig_results),
-      unique_trait_phenotype_tests = nrow(dedup_results),
-      unique_significant_trait_phenotype = nrow(sig_dedup_results),
+      unique_trait_phenotype_tests = uniqueN(all_results[, .(GWAS_ID, QTL_ID, Phenotype)]),
+      unique_significant_trait_phenotype = if (nrow(sig_results) > 0) uniqueN(sig_results[, .(GWAS_ID, QTL_ID, Phenotype)]) else 0L,
       unique_gwas_traits = length(unique(all_results$GWAS_ID)),
       unique_qtl_datasets = length(unique(all_results$QTL_ID)),
       unique_loci = length(unique(all_results$Locus)),
@@ -2171,16 +2318,16 @@ merge_all_results <- function(output_dir,
     print(summary_df, row.names = FALSE)
     cat("\n")
 
-    cat("Deduplication Note:\n")
+    cat("Locus Capture Note:\n")
     cat("-------------------------------------------------------------\n")
     cat("`significant_colocalizations` counts all locus-level rows.\n")
-    cat("`unique_significant_trait_phenotype` collapses repeated lead SNPs within the same GWAS/QTL/Phenotype combination, keeping the highest-PP4 row.\n\n")
+    cat("`unique_significant_trait_phenotype` counts unique GWAS/QTL/Phenotype combinations without choosing a representative locus.\n")
+    cat("`phenotype_locus_count` and `phenotype_loci` annotate all rows with how many distinct loci captured the same GWAS/QTL/Phenotype.\n\n")
 
-    # Top genes by PP4
-    if (nrow(sig_dedup_results) > 0) {
-      cat("\nTop 10 Unique Trait-Phenotype Hits by PP4:\n")
+    if (nrow(sig_results) > 0) {
+      cat("\nTop 10 Locus-Level Hits by PP4:\n")
       cat("-------------------------------------------------------------\n")
-      top_events <- head(sig_dedup_results[, .(GWAS_ID, QTL_ID, Locus, Phenotype, PP4, n_snps, lead_locus_count)], 10)
+      top_events <- head(sig_results[, .(GWAS_ID, QTL_ID, Locus, Phenotype, PP4, n_snps, phenotype_locus_count, phenotype_loci)], 10)
       print(top_events, row.names = FALSE)
     }
 

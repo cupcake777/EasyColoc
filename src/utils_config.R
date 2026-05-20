@@ -118,6 +118,14 @@ easycoloc_resolve_global_paths <- function(cfg_global, base_dir) {
       base_dir
     )
   }
+  if (!is.null(cfg_global$runtime$disk_ld_cache_dir) &&
+    is.character(cfg_global$runtime$disk_ld_cache_dir) &&
+    nzchar(cfg_global$runtime$disk_ld_cache_dir)) {
+    cfg_global$runtime$disk_ld_cache_dir <- easycoloc_resolve_path(
+      cfg_global$runtime$disk_ld_cache_dir,
+      base_dir
+    )
+  }
   cfg_global
 }
 

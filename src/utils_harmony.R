@@ -4,31 +4,46 @@ read_valid_harmony_cache <- function(gwas_cfg, qtl_build) {
   }
   source_build <- if (is.null(gwas_cfg$build)) "19" else gsub("hg", "", gwas_cfg$build)
   target_build <- gsub("hg", "", qtl_build)
-  cache_file <- file.path(cfg_global$harmonize_dir, glue("{gwas_cfg$id}_b{source_build}to{target_build}_harmonized.tsv"))
-  if (!file.exists(cache_file)) {
+  harmony_settings <- if (!is.null(cfg_global$harmonization_settings)) cfg_global$harmonization_settings else list()
+  compress_output <- if (!is.null(harmony_settings$compress_output)) isTRUE(harmony_settings$compress_output) else TRUE
+  cache_candidates <- easycoloc_harmonized_cache_candidates(
+    save_dir = cfg_global$harmonize_dir,
+    dataset_id = gwas_cfg$id,
+    source_build = source_build,
+    target_build = target_build,
+    compress_output = compress_output
+  )
+  existing_cache <- cache_candidates[file.exists(cache_candidates)]
+  if (length(existing_cache) == 0L) {
     return(NULL)
   }
-
-  cache_info <- file.info(cache_file)
   input_mtime <- if (!is.null(gwas_cfg$file) && file.exists(gwas_cfg$file)) file.info(gwas_cfg$file)$mtime else NA
   ref_fasta <- if (gwas_cfg$build == "hg19") cfg_global$ref_genome_hg19 else cfg_global$ref_genome_hg38
   ref_mtime <- if (!is.null(ref_fasta) && file.exists(ref_fasta)) file.info(ref_fasta)$mtime else NA
   dep_mtimes <- c(input_mtime, ref_mtime)
   dep_mtimes <- dep_mtimes[!is.na(dep_mtimes)]
   dep_mtime <- if (length(dep_mtimes) > 0) max(dep_mtimes) else NA
-  cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
-  cache_new_enough <- is.na(dep_mtime) || (!is.na(cache_info$mtime) && cache_info$mtime >= dep_mtime)
-  cache_header <- if (cache_size_ok) {
-    tryCatch(names(data.table::fread(cache_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
-  } else {
-    character()
+  valid_cache_file <- NULL
+  for (cache_file in existing_cache) {
+    cache_info <- file.info(cache_file)
+    cache_size_ok <- !is.na(cache_info$size) && cache_info$size > 0
+    cache_new_enough <- is.na(dep_mtime) || (!is.na(cache_info$mtime) && cache_info$mtime >= dep_mtime)
+    cache_header <- if (cache_size_ok) {
+      tryCatch(names(data.table::fread(cache_file, nrows = 0, showProgress = FALSE)), error = function(e) character())
+    } else {
+      character()
+    }
+    if (cache_size_ok && cache_new_enough && identical(cache_header, easycoloc_harmonized_gwas_output_cols())) {
+      valid_cache_file <- cache_file
+      break
+    }
   }
-  if (!cache_size_ok || !cache_new_enough || !identical(cache_header, easycoloc_harmonized_gwas_output_cols())) {
+  if (is.null(valid_cache_file)) {
     return(NULL)
   }
 
-  message(glue("Found cached harmonized file: {cache_file}"))
-  cached_dt <- data.table::fread(cache_file, showProgress = FALSE)
+  message(glue("Found cached harmonized file: {valid_cache_file}"))
+  cached_dt <- data.table::fread(valid_cache_file, showProgress = FALSE)
   easycoloc_standardize_harmonized_gwas(cached_dt, sample_size_n = gwas_cfg$sample_size_n)
 }
 
@@ -79,6 +94,7 @@ prepare_gwas_harmony <- function(gwas_cfg, qtl_build, n_threads = 1L, prefer_cac
   ref_alt_freq <- "AF"
   harmony_settings <- if (!is.null(cfg_global$harmonization_settings)) cfg_global$harmonization_settings else list()
   chunked <- if (!is.null(harmony_settings$chunked)) isTRUE(harmony_settings$chunked) else NULL
+  compress_output <- if (!is.null(harmony_settings$compress_output)) isTRUE(harmony_settings$compress_output) else TRUE
   chunk_min_rows <- if (!is.null(harmony_settings$chunk_min_rows)) {
     as.integer(harmony_settings$chunk_min_rows)
   } else {
@@ -106,7 +122,9 @@ prepare_gwas_harmony <- function(gwas_cfg, qtl_build, n_threads = 1L, prefer_cac
     sample_size_n = gwas_cfg$sample_size_n,
     chunked = chunked,
     chunk_min_rows = chunk_min_rows,
-    chunk_parallel_jobs = chunk_parallel_jobs
+    chunk_parallel_jobs = chunk_parallel_jobs,
+    compress_output = compress_output,
+    reuse_cache = !isFALSE(prefer_cache)
   )
 
   easycoloc_standardize_harmonized_gwas(gwas_harm, sample_size_n = gwas_cfg$sample_size_n)

@@ -12,7 +12,9 @@ normalize_chr_for_plink <- function(x) {
   gsub("^chr", "", as.character(x), ignore.case = TRUE)
 }
 
-gwas_file <- "./harmony/EAS_SCZ_b19to38_harmonized.tsv"
+gwas_candidates <- c("./harmony/EAS_SCZ_b19to38_harmonized.tsv.gz", "./harmony/EAS_SCZ_b19to38_harmonized.tsv")
+gwas_existing <- gwas_candidates[file.exists(gwas_candidates)]
+gwas_file <- if (length(gwas_existing) > 0L) gwas_existing[[1L]] else gwas_candidates[[1L]]
 bim_prefix <- Sys.getenv("EASYCOLOC_SMOKE_PLINK_PREFIX", unset = "refs/plink/hg38/1kg_hg38_filtered")
 keep_file <- Sys.getenv("EASYCOLOC_SMOKE_KEEP_FILE", unset = "refs/plink/keep/EAS.sample")
 bim_file <- paste0(bim_prefix, ".bim")
@@ -20,7 +22,7 @@ plink_prefix <- "temp/smoke_clump_EAS_SCZ"
 input_file <- paste0(plink_prefix, ".qassoc")
 
 if (!file.exists(gwas_file)) {
-  cat("[SMOKE-SKIP] harmonized GWAS fixture missing:", gwas_file, "\n")
+  cat("[SMOKE-SKIP] harmonized GWAS fixture missing:", paste(gwas_candidates, collapse = " or "), "\n")
   quit(save = "no", status = 0)
 }
 

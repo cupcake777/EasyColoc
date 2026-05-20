@@ -127,6 +127,8 @@ susie_count <- if (dir.exists(file.path(output_dir, "susie"))) {
 
 manifest_file <- file.path(output_dir, "output_manifest.tsv")
 manifest_summary_file <- file.path(output_dir, "output_manifest_summary.json")
+merged_results_file <- file.path(output_dir, "all_colocalization_results.csv")
+report_file <- file.path(output_dir, "coloc_report.html")
 
 status <- if (has_failed_tasks || has_runtime_failures || heartbeat_failed) {
   "FAILED"
@@ -135,6 +137,11 @@ status <- if (has_failed_tasks || has_runtime_failures || heartbeat_failed) {
 } else if (heartbeat_complete && event_summary_complete && event_report_complete) {
   "COMPLETE"
 } else if (heartbeat_complete && abf_count > 0) {
+  "COMPLETE"
+} else if (file.exists(merged_results_file) &&
+  file.exists(report_file) &&
+  file.exists(manifest_file) &&
+  abf_count > 0) {
   "COMPLETE"
 } else if (length(log_lines) > 0) {
   "INCOMPLETE"

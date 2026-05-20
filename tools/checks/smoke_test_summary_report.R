@@ -69,17 +69,16 @@ assert_true(!is.null(merged), "merge_all_results() returned NULL")
 assert_true(nrow(merged) == 3, "merge_all_results() row count mismatch")
 assert_true(file.exists(file.path(tmp_dir, "all_colocalization_results.csv")), "merged results file missing")
 assert_true(file.exists(file.path(tmp_dir, "significant_colocalizations_PP4_0.7.csv")), "significant results file missing")
-assert_true(file.exists(file.path(tmp_dir, "deduplicated_colocalization_results.csv")), "deduplicated results file missing")
-assert_true(file.exists(file.path(tmp_dir, "significant_unique_trait_phenotype_PP4_0.7.csv")), "deduplicated significant results file missing")
+assert_true(!file.exists(file.path(tmp_dir, "deduplicated_colocalization_results.csv")), "deduplicated results file should not be written")
+assert_true(!file.exists(file.path(tmp_dir, "significant_unique_trait_phenotype_PP4_0.7.csv")), "deduplicated significant results file should not be written")
 assert_true(file.exists(file.path(tmp_dir, "all_susie_results.csv")), "merged SuSiE file missing")
 assert_true(file.exists(file.path(tmp_dir, "summary_statistics.txt")), "summary statistics file missing")
 
-dedup <- fread(file.path(tmp_dir, "deduplicated_colocalization_results.csv"))
-assert_true(nrow(dedup) == 2, "deduplicated results row count mismatch")
-assert_true(dedup[Phenotype == "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+", lead_locus_count][1] == 2,
-            "lead_locus_count mismatch for duplicated phenotype")
-assert_true(abs(dedup[Phenotype == "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+", PP4][1] - 0.91) < 1e-9,
-            "deduplicated PP4 should keep the best locus")
+all_results <- fread(file.path(tmp_dir, "all_colocalization_results.csv"))
+ccdc30_rows <- all_results[Phenotype == "ENST00000654683.1|CCDC30|chr1:42482663-42484158|+"]
+assert_true(nrow(ccdc30_rows) == 2, "all results should retain both CCDC30 locus-level rows")
+assert_true(all(ccdc30_rows$phenotype_locus_count == 2), "phenotype_locus_count mismatch for duplicated phenotype")
+assert_true(all(ccdc30_rows$phenotype_loci == "rs10890255;rs10890256"), "phenotype_loci annotation mismatch")
 
 report_ok <- generate_html_report(
   results_dir = tmp_dir,

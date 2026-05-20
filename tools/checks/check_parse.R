@@ -22,6 +22,8 @@ files_to_check <- c(
   "tools/check_run_completion.R",
   "tools/build_output_manifest.R",
   "tools/build_harmony_qc_report.R",
+  "tools/clean_intermediates.R",
+  "tools/finalize_run.R",
   "tools/harmonize_gwas.R",
   "tools/summarize_run_status.R",
   "tools/checks/smoke_project_fixture.R",
@@ -37,6 +39,7 @@ files_to_check <- c(
   "tools/checks/smoke_test_doctor.R",
   "tools/checks/smoke_test_refs.R",
   "tools/checks/smoke_test_runtime_monitor.R",
+  "tools/checks/smoke_test_shard_runtime.R",
   "tools/checks/smoke_test_output_dir_tools.R",
   "examples/synthetic_plot_data.R",
   "examples/synthetic_plot_demo.R"
